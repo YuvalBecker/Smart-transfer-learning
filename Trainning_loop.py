@@ -13,11 +13,11 @@ if __name__ == "__main__":
     transform = transforms.Compose([transforms.Resize((224, 224)),
                                     transforms.ToTensor()])
     data_imagenet = datasets.ImageFolder(image_net_path, transform=transform)
-    dataloader = torch.utils.data.DataLoader(data_imagenet, batch_size=4,
+    dataloader = torch.utils.data.DataLoader(data_imagenet, batch_size=9,
                                              shuffle=True)
-    dataset_train = datasets.CIFAR10(root='.', train=True, download=False,
+    dataset_train = datasets.CIFAR10(root='.', train=True, download=True,
                                      transform=transform)
-    dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=4,
+    dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=8,
                                               shuffle=True)
 
     network = models.vgg19(pretrained=True).cuda()
