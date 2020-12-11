@@ -13,4 +13,8 @@ and compare between the 2 distributions by transforming to "normal" and use t te
 
 ** assuming log normal - is very naiv approach (And incorrect) .
 
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/output_layer_histograms.JPG)
 
+
+In the figure - layers output distributions, compare between 2 datsets. we can see for intuition , that the first layers seems to have global feature extraction , therfor its output
+distributions are more similar than the deeper layers. 
