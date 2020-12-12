@@ -12,6 +12,35 @@ class CustomRequireGrad:
         self.change_grads = change_grads
         self.network = net
 
+    @staticmethod
+    def _prepare_mean_std_layer(layer):
+        normal_dist_pre = np.log(layer)
+        vals_pre, axis_val_pre = np.histogram(normal_dist_pre, 100)
+        normal_dist_pre[normal_dist_pre < -4] = \
+            axis_val_pre[10 + np.argmax(vals_pre[10:])]
+        mu = np.mean(normal_dist_pre)
+        std = np.std(normal_dist_pre)
+        return mu, std
+
+    @staticmethod
+    def _plot_distribution(ind_layer, layer_pretrained, layer_test, p_val):
+        num_plots = 9
+        if ind_layer % num_plots == 0:
+            plt.figure()
+        # Assuming log normal dist due to relu :
+        plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
+                    ind_layer % num_plots + 1)
+        vals_pre, axis_val_pre = np.histogram(np.log(layer_pretrained), 100)
+        plt.plot(axis_val_pre[10:], vals_pre[9:] / np.max(vals_pre[10:]),
+                 linewidth=4, alpha=0.7, label='D')
+        vals, axis_val = np.histogram(np.log(layer_test), 100)
+        plt.plot(axis_val[10:], vals[9:] / np.max(vals[10:]), linewidth=4,
+                 alpha=0.7, label='D2')
+        plt.legend()
+        plt.xlim([-5, 3])
+        plt.ylim([0, 1 + 0.1])
+        plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(p_val, 2)))
+
     def _prepare_input_tensor(self):
         self.pretrained_iter = map(lambda v: v[0].cuda(),
                                    self.pretrained_data_set)
@@ -39,66 +68,29 @@ class CustomRequireGrad:
                 input_model = output_pre_trained
                 input_test = output_test
 
-    @ staticmethod
-    def _prepare_mean_std_layer(layer):
-        normal_dist_pre = np.log(layer)
-        vals_pre, axis_val_pre = np.histogram(normal_dist_pre, 100)
-        normal_dist_pre[normal_dist_pre < -4] = \
-            axis_val_pre[10 + np.argmax(vals_pre[10:])]
-        mu = np.mean(normal_dist_pre)
-        std = np.std(normal_dist_pre)
-        return mu, std
-
-    def _distribution_compare(self, test='t'):
+    def _distribution_compare(self, test='t', plot_dist=True):
         for ind, (layer_test, layer_pretrained) in enumerate(
                 zip(self.statistic_test.values(),
                     self.statistic_pretrained.values())):
-            num_plots = 9
-            if ind % num_plots == 0:
-                plt.figure()
-            # Assuming log normal dist due to relu :
-            plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
-                        ind % num_plots + 1)
-            vals_pre, axis_val_pre = np.histogram(np.log(layer_pretrained), 100)
-            plt.plot(axis_val_pre[10:], vals_pre[9:] / np.max(vals_pre[10:]),
-                     linewidth=4, alpha=0.7, label='D')
-            vals, axis_val = np.histogram(np.log(layer_test), 100)
-            plt.plot(axis_val[10:], vals[9:] / np.max(vals[10:]), linewidth=4
-                     , alpha=0.7, label='D2')
-            plt.legend()
-            plt.xlim([-5, 3])
-            plt.ylim([0, 1+0.1])
             mu_pre, std_pre = self._prepare_mean_std_layer(layer_pretrained)
             mu_test, std_test = self._prepare_mean_std_layer(layer_test)
-            test_normal = stats.norm.rvs(loc= mu_test, scale=std_test,
-                                         size=1000)
-            pretrained_normal = stats.norm.rvs(loc=mu_pre, scale=std_pre,
-                                               size=1000)
-            out = stats.ttest_ind(pretrained_normal, test_normal,
-                                  equal_var=False)
-            plt.title('Layer : ' + str(ind) + 'p: ' + str(np.round(out[1], 2)))
-            self.p_value.append(out[1])
+            if test == 't':
+                test_normal = stats.norm.rvs(loc=mu_test, scale=std_test,
+                                             size=200)
+                pretrained_normal = stats.norm.rvs(loc=mu_pre, scale=std_pre,
+                                                   size=200)
+                p_value = stats.ttest_ind(pretrained_normal, test_normal,
+                                          equal_var=False)[1]
+            self.p_value.append(p_value)
+            if plot_dist:
+                self._plot_distribution(ind_layer=ind,
+                                        layer_pretrained=layer_pretrained,
+                                        layer_test=layer_test, p_val=p_value)
 
-    def _require_grad_search(self, th_ratio, mode='stats'):
-        for ind, feature in enumerate(self.network.parameters()):
-            self.mean_var_tested.append((np.mean(np.abs(self.input_list[ind])),
-                                  np.var(np.abs(self.input_list[ind]))))
-            self.mean_var_pretrained_data.append((
-                np.mean(np.abs(self.outputs_list[ind])),
-                                  np.var(np.abs(self.outputs_list[ind]))))
-            if (np.mean(np.abs(self.input_list[ind])) >
-                    th_ratio * np.mean(np.abs(self.outputs_list[ind]))):
-                print('layer: ' + str(ind) + ' change grads')
-                self.list_grads.append(False)
-                self.layers_list_to_change.append(feature)
-            else:
-                self.list_grads.append(True)
-                self.layers_list_to_stay.append(feature)
-
-    def _require_grad_search(self, th_ratio, mode='stats'):
+    def _require_grad_search(self, p_value=0.1):
         for ind, feature in enumerate(self.network.parameters()):
             if ind < len(self.p_value):
-                if self.p_value[ind] > 0.1:
+                if self.p_value[ind] > p_value:
                     print('layer: ' + str(ind) + ' change grads')
                     self.list_grads.append(False)
                     self.layers_list_to_change.append(feature)

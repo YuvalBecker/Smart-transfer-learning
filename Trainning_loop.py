@@ -2,7 +2,9 @@ from torchvision import models
 import numpy as np
 from torchvision import transforms, datasets
 import torch
+import torch.nn.functional as F
 
+import matplotlib.pyplot as plt
 
 import torch.optim as optim
 import torch.nn as nn
@@ -21,14 +23,12 @@ if __name__ == "__main__":
                                               shuffle=True)
 
     network = models.vgg19(pretrained=True).cuda()
-
     num_ftrs = network.classifier[6].in_features
     network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
     rg.run(0.7)
     # Adjusting output to 10 classes
-
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
@@ -43,11 +43,9 @@ if __name__ == "__main__":
     dataset_train = datasets.CIFAR10(root='.',train=True,download=False,transform=transform)
     trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=16,
                                              shuffle=False)
-    import matplotlib.pyplot as plt
     #plt.plot(rg.mean_var)
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    import torch.nn.functional as F
 
     net = network
     criterion = nn.CrossEntropyLoss()
@@ -74,12 +72,7 @@ if __name__ == "__main__":
             loss = criterion(outputs, labels.cuda())
             loss.backward()
             optimizer.step()
-            #if i % 1200 == 0 :
-                #rg.list_grads = [True] * len(rg.list_grads)
-                #rg._update_require_grads_params()
-                #print('Updated grads')
 
-            # print statistics
             running_loss += loss.item()
             if i % 400 == 0:  # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
