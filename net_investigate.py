@@ -121,12 +121,12 @@ class CustomRequireGrad:
         self.statistic_pretrained = defaultdict(list)
         self.p_value = []
 
-    def run(self, th_ratio):
+    def run(self, p_value=0.1):
         self._initialize_parameters()
         self._prepare_input_tensor()
         self._calc_layers_outputs()  # calculating threshold outputs
         self._distribution_compare()
-        self._require_grad_search(th_ratio)
+        self._require_grad_search(p_value)
         if self.change_grads:
             self._update_require_grads_params()
             self._check_change_grads()

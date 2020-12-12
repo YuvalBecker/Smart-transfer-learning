@@ -10,6 +10,8 @@ import torch.optim as optim
 import torch.nn as nn
 from net_investigate import CustomRequireGrad
 
+## This script was taken from pytorch tutrial ... only for example
+## how to run use the class
 if __name__ == "__main__":
     image_net_path = r'/home/yuval/imageNet/'
     transform = transforms.Compose([transforms.Resize((224, 224)),
@@ -24,16 +26,15 @@ if __name__ == "__main__":
 
     network = models.vgg19(pretrained=True).cuda()
     num_ftrs = network.classifier[6].in_features
+    # Adjusting output to 10 classes
     network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
-    rg.run(0.7)
-    # Adjusting output to 10 classes
+    rg.run(p_value=0.1)
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
                                                          (0.5, 0.5, 0.5))])
-
     model = network
     batch_size=16
     testset = datasets.CIFAR10(root='./data', train=False,
@@ -43,36 +44,35 @@ if __name__ == "__main__":
     dataset_train = datasets.CIFAR10(root='.',train=True,download=False,transform=transform)
     trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=16,
                                              shuffle=False)
-    #plt.plot(rg.mean_var)
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-
     net = network
     criterion = nn.CrossEntropyLoss()
     # Changing specific layers learning rates
-    optimizer = optim.SGD([  {'params': rg.layers_list_to_stay},
-         {'params': rg.layers_list_to_change, 'lr': 1e-5},
-     ], lr=1e-3, momentum=0.9)
+
+    optimizer = optim.SGD([{'params': rg.layers_list_to_stay,'lr':1e-3},
+                           {'params': rg.layers_list_to_change, 'lr': 1e-7}]
+                          ,lr=1e-3, momentum=0.9)
+    optimizer = optim.SGD([{'params': network.parameters(),'lr':1e-3},]
+                          ,lr=1e-3, momentum=0.9)
+
+
     accuracy = []
     loss = []
     for epoch in range(1):  # loop over the dataset multiple times
-
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            if i >= 50e3/batch_size:
+            if i >= 200/batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
-
             # zero the parameter gradients
             optimizer.zero_grad()
-
             # forward + backward + optimize
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
             optimizer.step()
-
             running_loss += loss.item()
             if i % 400 == 0:  # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
@@ -89,12 +89,17 @@ if __name__ == "__main__":
                         _, predicted = torch.max(outputs.data, 1)
                         total += labels.size(0)
                         correct += np.array( (predicted.detach().cpu() == labels)).sum()
-                        if count > 100:
-                            break
-
+                        #if count > 400:
+                         #   break
                 print(
                     'Accuracy of the network on the 10000 test images: %d %%' % (
                             100 * correct / total))
                 accuracy.append((i,100 * correct / total ))
-
     print('Finished Training')
+
+    plt.plot(    np.array(accuracy)[:,0] ,    np.array(accuracy)[:,1],'-o')
+
+    plt.xlabel('Iterations')
+    plt.ylabel('Accuracy')
+    plt.show( )
+
