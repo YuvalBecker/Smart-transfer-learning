@@ -22,7 +22,7 @@ distributions are more similar than the deeper layers.
 ### First results:
 Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
 1. Trained without modifying layers gradients - 54% accuracy over test data (10000 samples) 
-2. Trained with modifying specific layers chosen by t -test - 68 % accuracy over test data
+2. Trained with modifying specific layers chosen by t -test - 68 % accuracy over test data (10000 samples)
 
 ** The trainning process was done without shuffle for comparison purposes. 
 
