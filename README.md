@@ -11,7 +11,7 @@ This approach reduces overfitting by reducing the amount of variables and increa
 At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
 and compare between the 2 distributions by transforming to "normal" and use t test with different variances.
 
-** assuming log normal - is very naiv approach (And incorrect) .
+** assuming log normal - is very naiv approach.
 
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/output_layer_histograms.JPG)
 
