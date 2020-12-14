@@ -11,7 +11,7 @@ This approach reduces overfitting by reducing the amount of variables and increa
 At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
 and compare between the 2 distributions by transforming to "normal" and use t test with different variances.
 
-** assuming log normal - is very naiv approach (And incorrect) .
+** assuming log normal - is very naiv approach.
 
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/output_layer_histograms.JPG)
 
@@ -22,7 +22,7 @@ distributions are more similar than the deeper layers.
 ### First results:
 Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
 1. Trained without modifying layers gradients - 54% accuracy over test data (10000 samples) 
-2. Trained with modifying specific layers chosen by t -test - 68 % accuracy over test data
+2. Trained with modifying specific layers chosen by t -test - 68 % accuracy over test data (10000 samples)
 
 ** The trainning process was done without shuffle for comparison purposes. 
 
