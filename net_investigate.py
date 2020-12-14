@@ -2,7 +2,13 @@ import numpy as np
 from collections import defaultdict
 from scipy import stats
 import matplotlib.pyplot as plt
+from functools import partial
+from torch.nn import Sequential
+import itertools
+activation = {}
 
+def hook_fn(name, model, input, output):
+    activation[name] = output.detach()
 
 class CustomRequireGrad:
     def __init__(self, net, pretrained_data_set, input_test,
@@ -47,31 +53,51 @@ class CustomRequireGrad:
         self.input_test_iter = map(lambda v: v[0].cuda(), self.input_test)
 
     def _calc_layers_outputs(self, batches_num=10):
+
+        def get_activation(name):
+            def hook(model, input, output):
+                try:
+                    activation[name] = output.detach()
+                except:
+                    activation[name] = None
+            return hook
+        hooks = {}
+        for name, module in self.network.named_modules():
+            hooks[name] = module.register_forward_hook(get_activation(name))
         for ind_batch, (input_model, input_test) \
                 in enumerate(zip(self.pretrained_iter,
                                  self.input_test_iter)):
             if ind_batch > batches_num:
                 break
-            for ind, feature in enumerate(self.network.features):
-                output_pre_trained = feature(input_model)
-                output_test = feature(input_test)
-                self.outputs_list[ind] += \
-                    feature(input_model).detach().cpu().numpy() \
-                    // self.pretrained_data_set.batch_size
-                self.input_list[ind] += \
-                    feature(input_test).detach().cpu().numpy()\
-                    // self.input_test.batch_size
-                self.statistic_test[ind].append(np.abs(np.ravel(
-                    (feature(input_test).detach().cpu().numpy())) + 1e-4))
-                self.statistic_pretrained[ind].append(np.abs(np.ravel(
-                    (feature(input_model).detach().cpu().numpy())) + 1e-4))
-                input_model = output_pre_trained
-                input_test = output_test
+            activation ={}
+            self.network(input_model)
+            activations_input = activation.copy()
+            activation ={}
+            self.network(input_test)
+            activations_input_test = activation.copy()
+            for name, module in self.network.named_modules():
+                 if activations_input_test[name] != None:
+                    vals_test =np.abs(np.ravel(
+                        activations_input_test[name].cpu()) + 1e-4)
+                    vals_pre =np.abs(np.ravel(
+                        activations_input[name].cpu()) + 1e-4)
+                    if len(vals_pre) >20e3:
+                        vals_test = vals_test[vals_test >3e-2]
+                        vals_test =vals_test[np.random.randint(0, len(vals_test),
+                                                               size=1000)]
+                        vals_pre = vals_pre[vals_pre >3e-2]
+                        vals_pre =vals_pre[np.random.randint(0, len(vals_pre),
+                                                             size=1000)]
+                    self.statistic_test[name].append(vals_test)
+                    self.statistic_pretrained[name].append(vals_pre)
 
     def _distribution_compare(self, test='t', plot_dist=True):
         for ind, (layer_test, layer_pretrained) in enumerate(
                 zip(self.statistic_test.values(),
                     self.statistic_pretrained.values())):
+            layer_test = list(itertools.chain.from_iterable(layer_test))
+            layer_pretrained = list(itertools.chain.from_iterable(
+                layer_pretrained))
             mu_pre, std_pre = self._prepare_mean_std_layer(layer_pretrained)
             mu_test, std_test = self._prepare_mean_std_layer(layer_test)
             if test == 't':
@@ -88,15 +114,22 @@ class CustomRequireGrad:
                                         layer_test=layer_test, p_val=p_value)
 
     def _require_grad_search(self, p_value=0.1):
-        for ind, feature in enumerate(self.network.parameters()):
-            if ind < len(self.p_value):
-                if self.p_value[ind] > p_value:
-                    print('layer: ' + str(ind) + ' change grads')
-                    self.list_grads.append(False)
-                    self.layers_list_to_change.append(feature)
-                else:
-                    self.list_grads.append(True)
-                    self.layers_list_to_stay.append(feature)
+        for ind,(name, module) in enumerate( self.network.named_modules() ) :
+
+            if (len( list( module.children()) ) ) < 2:
+                print(name)
+                if ind < len(self.p_value):
+                    if self.p_value[ind] > p_value:
+
+                        print('layer: ' + str(ind) + ' change grads')
+                        self.list_grads.append(False)
+                        for weight in module.parameters():
+                            self.layers_list_to_change.append(weight)
+                    else:
+                        self.list_grads.append(True)
+                        for weight in module.parameters():
+                            self.layers_list_to_stay.append(weight)
+
 
     def _update_require_grads_params(self):
         for param, require in zip(self.network.parameters(), self.list_grads):
@@ -124,7 +157,7 @@ class CustomRequireGrad:
     def run(self, p_value=0.1):
         self._initialize_parameters()
         self._prepare_input_tensor()
-        self._calc_layers_outputs()  # calculating threshold outputs
+        self._calc_layers_outputs(batches_num=2)  # calculating threshold outputs
         self._distribution_compare()
         self._require_grad_search(p_value)
         if self.change_grads:
