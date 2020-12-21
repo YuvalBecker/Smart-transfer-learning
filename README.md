@@ -9,9 +9,22 @@ By "similarly" - compare between the 2 distributions of the 2 datasets.
 This approach reduces overfitting by reducing the amount of variables and increase performance.
 
 At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
-and compare between the 2 distributions by transforming to "normal" and use t test with different variances.
+and compare between the 2 distributions by transforming to "normal" and use  kl divergence.
 
-** assuming log normal - is very naiv approach.
+call the constructor : `rg = CustomRequireGrad(network, dataloader, dataloader2)`
+
+To run distribution calculations : `rg.run(stats_value = xx)`
+
+Run inside the training loop : 
+```
+            loss = criterion(#Your inputs)
+            loss.backward()
+            rg.update_grads(net)
+            optimizer.step()
+``` 
+            
+In order to change the specific weights grads
+ 
 
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/output_layer_histograms.JPG)
 
@@ -27,3 +40,5 @@ Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet)
 ** The trainning process was done without shuffle for comparison purposes. 
 
 ** stopping criteria : over fitting.
+ 
+ 
