@@ -23,16 +23,6 @@ def smoothed_hist_kl_distance(a, b, nbins=10, sigma=1):
     return kl(asmooth, bsmooth)
 
 
-def update_grads(net, rg):
-    net_moudules = list(net.modules())
-    for ind in range(len(net_moudules)):
-        module = net_moudules[ind]
-        if len(list(module.parameters())) > 0:  # contains weights
-            if len(rg.layers_grad_mult[ind]) > 0:
-                module.weight.grad *= torch.FloatTensor(
-                    rg.layers_grad_mult[ind]['weights']).cuda()
-                module.bias.grad *= torch.FloatTensor(
-                    rg.layers_grad_mult[ind]['bias']).cuda()
 
 
 class CustomRequireGrad:
@@ -54,17 +44,18 @@ class CustomRequireGrad:
         std = np.std(normal_dist_pre)
         return mu, std
 
-    @staticmethod
-    def update_grads(net, rg):
+    def update_grads(self, net, max_layer=10):
         net_moudules = list(net.modules())
         for ind in range(len(net_moudules)):
+            if ind > max_layer:
+                break
             module = net_moudules[ind]
-            if len(list(module.parameters())) > 0 and ind > 2:  # weights
-                if len(rg.layers_grad_mult[ind]) > 0:
+            if len(list(module.parameters())) > 0:  # weights
+                if len(self.layers_grad_mult[ind]) > 0:
                     module.weight.grad *= torch.FloatTensor(
-                        rg.layers_grad_mult[ind]['weights']).cuda()
+                        self.layers_grad_mult[ind]['weights']).cuda()
                     module.bias.grad *= torch.FloatTensor(
-                        np.squeeze(rg.layers_grad_mult[ind]['bias'])).cuda()
+                        np.squeeze(self.layers_grad_mult[ind]['bias'])).cuda()
 
     @staticmethod
     def _plot_distribution(ind_layer, layer_pretrained, layer_test, stats_val):
@@ -191,7 +182,7 @@ class CustomRequireGrad:
                     self.statistic_pretrained.values())):
             stats_value = 0
 
-            if np.sum(layer_pretrained[0] != None):
+            if not np.sum(layer_pretrained[0]) is None:
                 layer_test = list(itertools.chain.from_iterable(layer_test))
                 layer_pretrained = list(itertools.chain.from_iterable(
                     layer_pretrained))
@@ -218,18 +209,16 @@ class CustomRequireGrad:
 
             self.stats_value.append(stats_value)
 
-    def _distribution_compare(self, test='kl', plot_dist=True):
+    def _distribution_compare(self, test='kl', plot_dist=False):
         for ind, (layer_test, layer_pretrained) in enumerate(
                 zip(self.statistic_test.values(),
                     self.statistic_pretrained.values())):
             stats_value = []
-            if np.sum(layer_pretrained[0] != None):
-                plot_dist = False
+            if not np.sum(layer_pretrained[0]) is None: # Contains grads layers
                 layer_test_concat = self._concat_func(layer_test)
                 layer_pretrained_concat = self._concat_func(layer_pretrained)
                 for layer_test, layer_pretrained in zip(
                         layer_test_concat,layer_pretrained_concat):
-
                     if test == 't':
                         mu_pre, std_pre = self._prepare_mean_std_layer(
                             layer_pretrained)
@@ -244,12 +233,14 @@ class CustomRequireGrad:
                     if test == 'kl':
                         norm_test = np.log(layer_test)
                         norm_pre = np.log(layer_pretrained)
-                        stats_value.append( 1 / smoothed_hist_kl_distance(
-                            norm_test, norm_pre, nbins=10, sigma=1))
-                        if plot_dist:
+                        kl_value = 1 / smoothed_hist_kl_distance(
+                            norm_test, norm_pre, nbins=10, sigma=1)
+                        stats_value.append(kl_value)
+                    if plot_dist:
                             self._plot_distribution(
-                                ind_layer=ind,layer_pretrained=layer_pretrained,
-                                layer_test=layer_test,stats_val=stats_value)
+                                ind_layer=ind,
+                                layer_pretrained=layer_pretrained,
+                                layer_test=layer_test, stats_val=stats_value[-1])
                     self.stats_value_per_layer[ind] = stats_value
             else:
                 self.stats_value_per_layer[ind] = 0
@@ -271,12 +262,17 @@ class CustomRequireGrad:
     def _require_grad_search(self, stats_value=0.1):
         for ind, (name, module) in enumerate(self.network.named_modules()):
             if (len(list(module.children()))) < 2 and np.size(
-                    self.stats_value_per_layer[ind]) > 1 :
+                    self.stats_value_per_layer[ind]) > 1:
                 if ind < len(self.stats_value_per_layer):
                     change_acitvations = np.ones(np.shape(
                         self.stats_value_per_layer[ind]))
-                    change_inds =np.where(np.array(self.stats_value_per_layer[
-                                                       ind]) > stats_value)[0]
+                    change_inds = np.where((np.array(self.stats_value_per_layer[
+                                                       ind]) > stats_value) *
+                                           (np.array(self.stats_value_per_layer[
+                                                       ind] ) < 1))[0]
+                    print('layer: ' + name +
+                          '  Similar distributions in activation '
+                                            'num: ' + str(change_inds) )
                     change_acitvations[change_inds] *= 1e-3
                     for weight in module.parameters():
                         new_shape = np.shape(weight)
@@ -285,7 +281,6 @@ class CustomRequireGrad:
                             (len(change_acitvations), 1, 1, 1))
                         if len(new_shape) > 1 :
                             self.layers_grad_mult[ind]['weights'] = {}
-
                             change_acitvations = np.reshape(
                                 change_acitvations,
                                 (len(change_acitvations), 1, 1, 1))

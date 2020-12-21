@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
 
-    rg.run(stats_value = 0.03)
+    rg.run(stats_value = 0.2)
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     # Changing specific layers learning rates
 
-    optimizer = optim.SGD([{'params': rg.layers_list_to_stay,'lr':1e-2},
+    optimizer = optim.SGD([{'params': rg.layers_list_to_stay, 'lr':1e-2},
                            {'params': rg.layers_list_to_change, 'lr': 1e-2}]
                           ,lr=1e-2, momentum=0.9)
 
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     for epoch in range(45):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            if i >= 80/batch_size:
+            if i >= 40/batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
-            rg.update_grads(net, rg)
+            rg.update_grads(net)
             optimizer.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         accuracy.append((epoch,100 * correct / total ))
     print('Finished Training')
 
-    plt.plot( np.array(accuracy)[:,0] ,    np.array(accuracy)[:,1],'-o')
+    plt.plot( np.array(accuracy)[:,0], np.array(accuracy)[:,1] ,'-o')
 
     plt.xlabel('Iterations')
     plt.ylabel('Accuracy')
