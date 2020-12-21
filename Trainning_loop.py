@@ -14,7 +14,7 @@ from net_investigate import CustomRequireGrad
 ## how to run use the class
 if __name__ == "__main__":
     image_net_path = r'/home/yuval/imageNet/'
-    transform = transforms.Compose([transforms.Resize((224, 224)),
+    transform = transforms.Compose([transforms.Resize((122, 224)),
                                     transforms.ToTensor()])
     data_imagenet = datasets.ImageFolder(image_net_path, transform=transform)
     dataloader = torch.utils.data.DataLoader(data_imagenet, batch_size=4,
@@ -27,22 +27,24 @@ if __name__ == "__main__":
     network = models.vgg19(pretrained=True).cuda()
     num_ftrs = network.classifier[6].in_features
     # Adjusting output to 10 classes
-    network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
-    rg.run(p_value=0.07)
 
+    rg.run(stats_value = 0.03)
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
                                                          (0.5, 0.5, 0.5))])
+    network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
+
     model = network
-    batch_size=16
+    batch_size= 16
     testset = datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=16,
                                              shuffle=False, num_workers=2)
-    dataset_train = datasets.CIFAR10(root='.',train=True,download=False,transform=transform)
+    dataset_train = datasets.CIFAR10(root='.',train=True,
+                                     download=False,transform=transform)
     trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=16,
                                              shuffle=False)
     classes = ('plane', 'car', 'bird', 'cat',
@@ -51,17 +53,17 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     # Changing specific layers learning rates
 
-    optimizer = optim.SGD([{'params': rg.layers_list_to_stay,'lr':1e-3},
-                           {'params': rg.layers_list_to_change, 'lr': 1e-7}]
-                          ,lr=1e-3, momentum=0.9)
+    optimizer = optim.SGD([{'params': rg.layers_list_to_stay,'lr':1e-2},
+                           {'params': rg.layers_list_to_change, 'lr': 1e-2}]
+                          ,lr=1e-2, momentum=0.9)
 
-
+    optimizer = optim.SGD(net.parameters(),lr=1e-3, momentum=0.9)
     accuracy = []
     loss = []
     for epoch in range(45):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            if i >= 50/batch_size:
+            if i >= 80/batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -71,6 +73,7 @@ if __name__ == "__main__":
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
+            rg.update_grads(net, rg)
             optimizer.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
@@ -100,4 +103,5 @@ if __name__ == "__main__":
     plt.xlabel('Iterations')
     plt.ylabel('Accuracy')
     plt.show()
+
 

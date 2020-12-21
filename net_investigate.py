@@ -2,13 +2,38 @@ import numpy as np
 from collections import defaultdict
 from scipy import stats
 import matplotlib.pyplot as plt
-from functools import partial
-from torch.nn import Sequential
 import itertools
-activation = {}
 
-def hook_fn(name, model, input, output):
-    activation[name] = output.detach()
+import torch
+from scipy.ndimage.filters import gaussian_filter
+
+
+def kl(p, q):
+    p = np.asarray(p, dtype=np.float)
+    q = np.asarray(q, dtype=np.float)
+
+    return np.sum(np.where(p != 0, p * np.log(p / q), 0))
+
+
+def smoothed_hist_kl_distance(a, b, nbins=10, sigma=1):
+    ahist, bhist = (np.histogram(a, bins=nbins)[0],
+                    np.histogram(b, bins=nbins)[0])
+    asmooth, bsmooth = (gaussian_filter(ahist, sigma),
+                        gaussian_filter(bhist, sigma))
+    return kl(asmooth, bsmooth)
+
+
+def update_grads(net, rg):
+    net_moudules = list(net.modules())
+    for ind in range(len(net_moudules)):
+        module = net_moudules[ind]
+        if len(list(module.parameters())) > 0:  # contains weights
+            if len(rg.layers_grad_mult[ind]) > 0:
+                module.weight.grad *= torch.FloatTensor(
+                    rg.layers_grad_mult[ind]['weights']).cuda()
+                module.bias.grad *= torch.FloatTensor(
+                    rg.layers_grad_mult[ind]['bias']).cuda()
+
 
 class CustomRequireGrad:
     def __init__(self, net, pretrained_data_set, input_test,
@@ -17,6 +42,7 @@ class CustomRequireGrad:
         self.input_test = input_test
         self.change_grads = change_grads
         self.network = net
+        self.activation = {}
 
     @staticmethod
     def _prepare_mean_std_layer(layer):
@@ -29,99 +55,211 @@ class CustomRequireGrad:
         return mu, std
 
     @staticmethod
-    def _plot_distribution(ind_layer, layer_pretrained, layer_test, p_val):
+    def update_grads(net, rg):
+        net_moudules = list(net.modules())
+        for ind in range(len(net_moudules)):
+            module = net_moudules[ind]
+            if len(list(module.parameters())) > 0 and ind > 2:  # weights
+                if len(rg.layers_grad_mult[ind]) > 0:
+                    module.weight.grad *= torch.FloatTensor(
+                        rg.layers_grad_mult[ind]['weights']).cuda()
+                    module.bias.grad *= torch.FloatTensor(
+                        np.squeeze(rg.layers_grad_mult[ind]['bias'])).cuda()
+
+    @staticmethod
+    def _plot_distribution(ind_layer, layer_pretrained, layer_test, stats_val):
         num_plots = 9
-        if ind_layer % num_plots == 0:
-            plt.figure()
         # Assuming log normal dist due to relu :
         plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
                     ind_layer % num_plots + 1)
-        vals_pre, axis_val_pre = np.histogram(np.log(layer_pretrained), 100)
-        plt.plot(axis_val_pre[10:], vals_pre[9:] / np.max(vals_pre[10:]),
+        values_pre, axis_val_pre = np.histogram(np.log(layer_pretrained), 100)
+        plt.plot(axis_val_pre[10:], values_pre[9:] / np.max(values_pre[10:]),
                  linewidth=4, alpha=0.7, label='D')
-        vals, axis_val = np.histogram(np.log(layer_test), 100)
-        plt.plot(axis_val[10:], vals[9:] / np.max(vals[10:]), linewidth=4,
+        values, axis_val = np.histogram(np.log(layer_test), 100)
+        plt.plot(axis_val[10:], values[9:] / np.max(values[10:]), linewidth=4,
                  alpha=0.7, label='D2')
         plt.legend()
         plt.xlim([-5, 3])
         plt.ylim([0, 1 + 0.1])
-        plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(p_val, 2)))
+        plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
+            stats_val, 2)))
+
+    def get_activation(self, name):
+        def hook(_, __, output):
+            try:
+                self.activation[name] = output.detach()
+            except:
+                self.activation[name] = None
+
+        return hook
 
     def _prepare_input_tensor(self):
         self.pretrained_iter = map(lambda v: v[0].cuda(),
                                    self.pretrained_data_set)
         self.input_test_iter = map(lambda v: v[0].cuda(), self.input_test)
 
-    def _calc_layers_outputs(self, batches_num=10):
-
-        def get_activation(name):
-            def hook(model, input, output):
-                try:
-                    activation[name] = output.detach()
-                except:
-                    activation[name] = None
-            return hook
+    def _calc_layers_outputs_global(self, batches_num=10):
         hooks = {}
         for name, module in self.network.named_modules():
-            hooks[name] = module.register_forward_hook(get_activation(name))
+            hooks[name] = module.register_forward_hook(
+                self.get_activation(name))
         for ind_batch, (input_model, input_test) \
                 in enumerate(zip(self.pretrained_iter,
                                  self.input_test_iter)):
             if ind_batch > batches_num:
                 break
-            activation ={}
+            self.activation = {}
             self.network(input_model)
-            activations_input = activation.copy()
-            activation ={}
+            activations_input = self.activation.copy()
+            self.activation = {}
             self.network(input_test)
-            activations_input_test = activation.copy()
+            activations_input_test = self.activation.copy()
             for name, module in self.network.named_modules():
-                 if activations_input_test[name] != None:
-                    vals_test =np.abs(np.ravel(
+                if activations_input_test[name] is not None:
+                    values_test = np.abs(np.ravel(
                         activations_input_test[name].cpu()) + 1e-4)
-                    vals_pre =np.abs(np.ravel(
+                    values_pre = np.abs(np.ravel(
                         activations_input[name].cpu()) + 1e-4)
-                    if len(vals_pre) >20e3:
-                        vals_test = vals_test[vals_test >3e-2]
-                        vals_test =vals_test[np.random.randint(0, len(vals_test),
-                                                               size=1000)]
-                        vals_pre = vals_pre[vals_pre >3e-2]
-                        vals_pre =vals_pre[np.random.randint(0, len(vals_pre),
-                                                             size=1000)]
-                    self.statistic_test[name].append(vals_test)
-                    self.statistic_pretrained[name].append(vals_pre)
+                    if len(values_pre) > 20e3:
+                        values_test = values_test[values_test > 3e-2]
+                        values_test = values_test[np.random.randint(
+                            0, len(values_test), size=4000)]
+                        values_pre = values_pre[values_pre > 3e-2]
+                        values_pre = values_pre[np.random.randint(
+                            0, len(values_pre), size=4000)]
+                    self.statistic_test[name].append(values_test)
+                    self.statistic_pretrained[name].append(values_pre)
 
-    def _distribution_compare(self, test='t', plot_dist=True):
+    def _calc_layers_outputs(self, batches_num=10):
+        hooks = {}
+        for name, module in self.network.named_modules():
+            hooks[name] = module.register_forward_hook(
+                self.get_activation(name))
+        for ind_batch, (input_model, input_test) \
+                in enumerate(zip(self.pretrained_iter,
+                                 self.input_test_iter)):
+            if ind_batch > batches_num:
+                break
+            self.activation = {}
+            self.network(input_model)
+            activations_input = self.activation.copy()
+            self.activation = {}
+            self.network(input_test)
+            activations_input_test = self.activation.copy()
+            for name, module in self.network.named_modules():
+                if activations_input_test[name] is not None:
+                    values_test = np.abs(
+                        activations_input_test[name].cpu().numpy() + 1e-4)
+                    values_pre = np.abs(
+                        activations_input[name].cpu().numpy() + 1e-4)
+                    values_test2 = None
+                    values_pre2 = None
+                    if len(np.shape(values_test)) > 2:
+                        values_test1 = np.transpose(values_test, [1, 0, 2, 3])
+                        values_test2 = np.zeros(((np.shape(values_test1)[0],
+                                                  np.prod(np.shape(values_test1)
+                                                          [1:]))))
+                        values_pre1 = np.transpose(values_pre, [1, 0, 2, 3])
+                        values_pre2 = np.zeros(((np.shape(values_pre1)[0],
+                                                 np.prod(np.shape(values_pre1)
+                                                         [1:]))))
+
+                        for ll in range(np.shape(values_test1)[0]):
+                            values_test2[ll] = np.ravel(values_test1[ll])
+                            values_pre2[ll] = np.ravel(values_pre1[ll])
+                        if len(values_pre2[0]) > 20e3:
+                            values_test2 = values_test2[:, np.random.randint(
+                                0, len(values_pre2[0]), size=4000)]
+                            values_pre2 = values_pre2[:, np.random.randint(
+                                0, len(values_pre2[0]), size=4000)]
+                    self.statistic_test[name].append(values_test2)
+                    self.statistic_pretrained[name].append(values_pre2)
+
+    @staticmethod
+    def _concat_func(list_arr):
+        init_vec = []
+        for vec in list_arr:
+            if len(init_vec) == 0:
+                init_vec = vec
+            else:
+                init_vec = np.concatenate([init_vec, vec], axis=1)
+        return init_vec
+
+    def _distribution_compare_global(self, test='kl', plot_dist=False):
         for ind, (layer_test, layer_pretrained) in enumerate(
                 zip(self.statistic_test.values(),
                     self.statistic_pretrained.values())):
-            layer_test = list(itertools.chain.from_iterable(layer_test))
-            layer_pretrained = list(itertools.chain.from_iterable(
-                layer_pretrained))
-            mu_pre, std_pre = self._prepare_mean_std_layer(layer_pretrained)
-            mu_test, std_test = self._prepare_mean_std_layer(layer_test)
-            if test == 't':
-                test_normal = stats.norm.rvs(loc=mu_test, scale=std_test,
-                                             size=200)
-                pretrained_normal = stats.norm.rvs(loc=mu_pre, scale=std_pre,
-                                                   size=200)
-                p_value = stats.ttest_ind(pretrained_normal, test_normal,
-                                          equal_var=False)[1]
-            self.p_value.append(p_value)
-            if plot_dist:
-                self._plot_distribution(ind_layer=ind,
-                                        layer_pretrained=layer_pretrained,
-                                        layer_test=layer_test, p_val=p_value)
+            stats_value = 0
 
-    def _require_grad_search(self, p_value=0.1):
-        for ind,(name, module) in enumerate( self.network.named_modules() ) :
+            if np.sum(layer_pretrained[0] != None):
+                layer_test = list(itertools.chain.from_iterable(layer_test))
+                layer_pretrained = list(itertools.chain.from_iterable(
+                    layer_pretrained))
+                if test == 't':
+                    mu_pre, std_pre = self._prepare_mean_std_layer(
+                        layer_pretrained)
+                    mu_test, std_test = self._prepare_mean_std_layer(layer_test)
+                    test_normal = stats.norm.rvs(loc=mu_test, scale=std_test,
+                                                 size=200)
+                    pretrained_normal = stats.norm.rvs(
+                        loc=mu_pre, scale=std_pre, size=200)
+                    stats_value = stats.ttest_ind(
+                        pretrained_normal, test_normal, equal_var=False)[1]
+                if test == 'kl':
+                    norm_test = np.log(layer_test)
+                    norm_pre = np.log(layer_pretrained)
+                    stats_value = 1 / smoothed_hist_kl_distance(
+                        norm_test, norm_pre, nbins=10, sigma=1)
+                    if plot_dist:
+                        self._plot_distribution(ind_layer=ind,
+                                                layer_pretrained=layer_pretrained,
+                                                layer_test=layer_test,
+                                                stats_val=stats_value)
 
-            if (len( list( module.children()) ) ) < 2:
-                print(name)
-                if ind < len(self.p_value):
-                    if self.p_value[ind] > p_value:
+            self.stats_value.append(stats_value)
 
-                        print('layer: ' + str(ind) + ' change grads')
+    def _distribution_compare(self, test='kl', plot_dist=True):
+        for ind, (layer_test, layer_pretrained) in enumerate(
+                zip(self.statistic_test.values(),
+                    self.statistic_pretrained.values())):
+            stats_value = []
+            if np.sum(layer_pretrained[0] != None):
+                plot_dist = False
+                layer_test_concat = self._concat_func(layer_test)
+                layer_pretrained_concat = self._concat_func(layer_pretrained)
+                for layer_test, layer_pretrained in zip(
+                        layer_test_concat,layer_pretrained_concat):
+
+                    if test == 't':
+                        mu_pre, std_pre = self._prepare_mean_std_layer(
+                            layer_pretrained)
+                        mu_test, std_test = self._prepare_mean_std_layer(
+                            layer_test)
+                        test_normal = stats.norm.rvs(
+                            loc=mu_test, scale=std_test,size=200)
+                        pretrained_normal = stats.norm.rvs(
+                            loc=mu_pre, scale=std_pre, size=200)
+                        stats_value = stats.ttest_ind(
+                            pretrained_normal, test_normal, equal_var=False)[1]
+                    if test == 'kl':
+                        norm_test = np.log(layer_test)
+                        norm_pre = np.log(layer_pretrained)
+                        stats_value.append( 1 / smoothed_hist_kl_distance(
+                            norm_test, norm_pre, nbins=10, sigma=1))
+                        if plot_dist:
+                            self._plot_distribution(
+                                ind_layer=ind,layer_pretrained=layer_pretrained,
+                                layer_test=layer_test,stats_val=stats_value)
+                    self.stats_value_per_layer[ind] = stats_value
+            else:
+                self.stats_value_per_layer[ind] = 0
+
+    def _require_grad_search_global(self, stats_value=0.1):
+        for ind, (name, module) in enumerate(self.network.named_modules()):
+            if (len(list(module.children()))) < 2:
+                if ind < len(self.stats_value):
+                    if self.stats_value[ind] > stats_value:
+                        print('layer: ' + name + ' change grads')
                         self.list_grads.append(False)
                         for weight in module.parameters():
                             self.layers_list_to_change.append(weight)
@@ -130,6 +268,37 @@ class CustomRequireGrad:
                         for weight in module.parameters():
                             self.layers_list_to_stay.append(weight)
 
+    def _require_grad_search(self, stats_value=0.1):
+        for ind, (name, module) in enumerate(self.network.named_modules()):
+            if (len(list(module.children()))) < 2 and np.size(
+                    self.stats_value_per_layer[ind]) > 1 :
+                if ind < len(self.stats_value_per_layer):
+                    change_acitvations = np.ones(np.shape(
+                        self.stats_value_per_layer[ind]))
+                    change_inds =np.where(np.array(self.stats_value_per_layer[
+                                                       ind]) > stats_value)[0]
+                    change_acitvations[change_inds] *= 1e-3
+                    for weight in module.parameters():
+                        new_shape = np.shape(weight)
+                        change_acitvations= np.reshape(
+                            change_acitvations,
+                            (len(change_acitvations), 1, 1, 1))
+                        if len(new_shape) > 1 :
+                            self.layers_grad_mult[ind]['weights'] = {}
+
+                            change_acitvations = np.reshape(
+                                change_acitvations,
+                                (len(change_acitvations), 1, 1, 1))
+                            self.layers_grad_mult[ind]['weights'] = np.tile(
+                                change_acitvations, (
+                                    1, new_shape[1], new_shape[2], new_shape[3]))
+                        else:
+                            self.layers_grad_mult[ind]['bias'] = {}
+                            self.layers_grad_mult[ind]['bias'] = change_acitvations
+
+                else:
+                    for weight in module.parameters():
+                        self.layers_grad_mult[ind] = None
 
     def _update_require_grads_params(self):
         for param, require in zip(self.network.parameters(), self.list_grads):
@@ -145,21 +314,23 @@ class CustomRequireGrad:
     def _initialize_parameters(self):
         self.list_grads = []
         self.outputs_list = defaultdict(int)
+        self.layers_grad_mult =defaultdict(dict)
         self.input_list = defaultdict(int)
+        self.stats_value_per_layer = defaultdict(int)
         self.layers_list_to_change = []
         self.layers_list_to_stay = []
         self.mean_var_tested = []
         self.mean_var_pretrained_data = []
         self.statistic_test = defaultdict(list)
         self.statistic_pretrained = defaultdict(list)
-        self.p_value = []
+        self.stats_value = []
 
-    def run(self, p_value=0.1):
+    def run(self, stats_value=0.1):
         self._initialize_parameters()
         self._prepare_input_tensor()
-        self._calc_layers_outputs(batches_num=2)  # calculating threshold outputs
+        self._calc_layers_outputs(batches_num=2)
         self._distribution_compare()
-        self._require_grad_search(p_value)
+        self._require_grad_search(stats_value)
         if self.change_grads:
             self._update_require_grads_params()
             self._check_change_grads()
