@@ -15,7 +15,7 @@ call the constructor : `rg = CustomRequireGrad(network, dataloader, dataloader2)
 
 To run distribution calculations : `rg.run(stats_value = xx)`
 
-Run inside the trainning loop : 
+Run inside the training loop : 
 ```
             loss = criterion(#Your inputs)
             loss.backward()
