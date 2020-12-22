@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 import torch.optim as optim
 import torch.nn as nn
-from net_investigate import CustomRequireGrad
+from distribution_net import CustomRequireGrad
 
 ## This script was taken from pytorch tutrial ... only for example
 ## how to run use the class
@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
 
-    rg.run(stats_value = 0.2)
+    rg.run(stats_value = 0.1)
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
