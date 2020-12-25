@@ -14,12 +14,16 @@ from distribution_net import CustomRequireGrad
 ## how to run use the class
 if __name__ == "__main__":
     image_net_path = r'/home/yuval/imageNet/'
-    transform = transforms.Compose([transforms.Resize((122, 224)),
+    transform = transforms.Compose([transforms.Resize((122, 122)),
                                     transforms.ToTensor()])
     data_imagenet = datasets.ImageFolder(image_net_path, transform=transform)
     dataloader = torch.utils.data.DataLoader(data_imagenet, batch_size=4,
                                              shuffle=True)
-    dataset_train = datasets.CIFAR10(root='.', train=True, download=True,
+    transform_rgb = transforms.Lambda(lambda image: image.convert('RGB'))
+
+    transform = transforms.Compose([transform_rgb, transforms.Resize((122, 122)),
+                                    transforms.ToTensor()])
+    dataset_train = datasets.FashionMNIST(root='.', train=True, download=True,
                                      transform=transform)
     dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=4,
                                               shuffle=True)
@@ -30,7 +34,7 @@ if __name__ == "__main__":
 
     rg = CustomRequireGrad(network, dataloader, dataloader2)
 
-    rg.run(stats_value = 0.1)
+    rg.run()
     transform = transforms.Compose([transforms.Resize((224,224)),
                                     transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5),
@@ -63,7 +67,7 @@ if __name__ == "__main__":
     for epoch in range(45):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            if i >= 40/batch_size:
+            if i >= 20/batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -73,7 +77,8 @@ if __name__ == "__main__":
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
-            rg.update_grads(net)
+            #if epoch < 8:
+            #    rg.update_grads(net)
             optimizer.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
@@ -89,7 +94,7 @@ if __name__ == "__main__":
                 outputs = net(images.cuda())
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
-                correct += np.array( (predicted.detach().cpu() == labels)).sum()
+                correct += np.array((predicted.detach().cpu() == labels)).sum()
                 if count > 100:
                     break
         print(
