@@ -2,10 +2,7 @@ from torchvision import models
 import numpy as np
 from torchvision import transforms, datasets
 import torch
-import torch.nn.functional as F
-
 import matplotlib.pyplot as plt
-
 import torch.optim as optim
 import torch.nn as nn
 from distribution_net import CustomRequireGrad
@@ -61,13 +58,13 @@ if __name__ == "__main__":
                            {'params': rg.layers_list_to_change, 'lr': 1e-2}]
                           ,lr=1e-2, momentum=0.9)
 
-    optimizer = optim.SGD(net.parameters(),lr=1e-3, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=1e-3, momentum=0.9)
     accuracy = []
     loss = []
     for epoch in range(45):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            if i >= 20/batch_size:
+            if i >= 22/batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -77,7 +74,7 @@ if __name__ == "__main__":
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
-            #if epoch < 8:
+            #if epoch < 35:
             #    rg.update_grads(net)
             optimizer.step()
             running_loss += loss.item()
@@ -103,7 +100,7 @@ if __name__ == "__main__":
         accuracy.append((epoch,100 * correct / total ))
     print('Finished Training')
 
-    plt.plot( np.array(accuracy)[:,0], np.array(accuracy)[:,1] ,'-o')
+    plt.plot(np.array(accuracy)[:,0], np.array(accuracy)[:,1] ,'-o')
 
     plt.xlabel('Iterations')
     plt.ylabel('Accuracy')

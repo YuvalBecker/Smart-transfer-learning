@@ -69,25 +69,33 @@ class CustomRequireGrad:
         plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
             stats_val, 2)))
 
-    @ staticmethod
-    def plot_activation(layer1, layer2):
-        num_kernels = np.shape(layer1)[1]
-        num_per_axis = int(np.floor(np.sqrt(num_kernels)))
-        for i in range(num_per_axis**2):
-            plt.figure(1)
-            plt.subplot(num_per_axis, num_per_axis,
-                        i + 1)
-            plt.imshow(layer1[0][i])
-            plt.figure(2)
-            plt.subplot(num_per_axis, num_per_axis,
-                        i + 1)
-            plt.imshow(layer2[0][i])
-
     def __init__(self, net, pretrained_data_set, input_test):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
         self.activation = {}
+
+    def plot_activation(self, name_layer, indexes, im_batch=0, save_path='.'):
+        self.activations_input_pre[name_layer][0][indexes[0]]
+        num_kernels = np.size(indexes)
+        num_per_axis = int(np.ceil(np.sqrt(num_kernels)))
+        fig_pre = plt.figure(1)
+        fig_new = plt.figure(2)
+        for i, index in enumerate(indexes):
+            fig_pre = plt.figure(1)
+            plt.subplot(num_per_axis, num_per_axis,
+                        i + 1)
+            plt.imshow(self.activations_input_pre[name_layer][im_batch][i]
+                       .cpu().numpy())
+            fig_new = plt.figure(2)
+            plt.subplot(num_per_axis, num_per_axis,
+                        i + 1)
+            plt.imshow(self.activations_input_test[name_layer][im_batch][i]
+                       .cpu().numpy())
+        fig_pre.savefig(save_path+'/'+name_layer+"_pre.jpg", dpi=900)
+        fig_new.savefig(save_path+'/'+name_layer+"_new.jpg", dpi=900)
+        fig_new.clf()
+        fig_pre.clf()
 
     def update_grads(self, net, max_layer=8):
         for ind, (name, module) in enumerate(net.named_modules()):
@@ -126,18 +134,18 @@ class CustomRequireGrad:
                 break
             self.activation = {}
             self.network(input_model)
-            activations_input = self.activation.copy()
+            self.activations_input_pre = self.activation.copy()
             self.activation = {}
             self.network(input_test)
-            activations_input_test = self.activation.copy()
+            self.activations_input_test = self.activation.copy()
             values_gram_test = 0
             values_gram_pre = 0
             for name, module in self.network.named_modules():
-                if activations_input_test[name] is not None:
+                if self.activations_input_test[name] is not None:
                     values_test = np.abs(
-                        activations_input_test[name].cpu().numpy() + 1e-4)
+                        self.activations_input_test[name].cpu().numpy() + 1e-4)
                     values_pre = np.abs(
-                        activations_input[name].cpu().numpy() + 1e-4)
+                        self.activations_input_pre[name].cpu().numpy() + 1e-4)
 
                     values_test2 = None
                     values_pre2 = None
@@ -177,7 +185,7 @@ class CustomRequireGrad:
                     self.statistic_test[name].append(values_test2)
                     self.statistic_pretrained[name].append(values_pre2)
 
-    def _distribution_compare(self, test='kl', plot_dist=False):
+    def _distribution_compare(self, test='kl', plot_dist=True):
         for layer_test, layer_pretrained in (
                 zip(self.statistic_test.items(),
                     self.statistic_pretrained.items())):
@@ -219,9 +227,15 @@ class CustomRequireGrad:
         for ind, (name, module) in enumerate(self.network.named_modules()):
             stats_value = []
             if np.size(self.gram_test[name]) > 1:  # check if has values
-                for test, pre in zip(self.gram_test[name],
-                                     self.gram_pre[name]):
-                    stats_value.append(1/np.mean(np.abs(test - pre)))
+                for ind_inside_layer, (test, pre) in enumerate(zip(
+                        self.gram_test[name], self.gram_pre[name])):
+                    act_power_pre = np.mean(self.activations_input_pre[name][0]
+                                            [ind_inside_layer].cpu().numpy()**2)
+                    act_power_test = np.mean(self.activations_input_test[name]
+                                             [0][ind_inside_layer]
+                                             .cpu().numpy()**2)
+                    stats_value.append((1/(1e-9 + np.mean(np.abs(test - pre)))
+                                        )*(act_power_test*act_power_pre))
             else:
                 stats_value = [1e-9]
                 self.stats_value_per_layer[name] = stats_value.copy()
@@ -231,7 +245,7 @@ class CustomRequireGrad:
         th_value = np.median([np.median(val)
                               for key, val in
                               self.stats_value_per_layer.items()])
-        th_value = th_value*10
+        th_value = th_value*1
         for ind, (name, module) in enumerate(self.network.named_modules()):
             if (len(list(module.children()))) < 2 and np.size(
                     self.stats_value_per_layer[name]) > 1:
@@ -242,6 +256,11 @@ class CustomRequireGrad:
                                                          name]) > th_value) *
                                            (np.array(self.stats_value_per_layer[
                                                          name]) < np.inf))[0]
+                    if len(change_inds) > 1 and ind < 14:
+                        path_save = "./data/save_activations"
+                        self.plot_activation(name_layer=name,
+                                             indexes=change_inds,
+                                             im_batch=0, save_path=path_save)
                     print('layer: ' + name +
                           '  Similar distributions in activation '
                           'num: ' + str(change_inds))
