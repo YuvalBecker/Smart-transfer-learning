@@ -10,6 +10,7 @@ This approach reduces overfitting by reducing the amount of variables and increa
 
 At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
 and compare between the 2 distributions by transforming to "normal" and use  kl divergence.
+Or by comparing between the distributions of gram matrixes , in order to reduce the localization dependancy.
 
 call the constructor : `rg = CustomRequireGrad(network, dataloader, dataloader2)`
 
@@ -31,6 +32,13 @@ In order to change the specific weights grads
 
 In the figure - layers output distributions, compare between 2 datsets. we can see for intuition , that the first layers seems to have global feature extraction , therfor its output
 distributions are more similar than the deeper layers. 
+
+** clarification: Distribution measurement is performed for every kernel in each layer - meanning , some kernel weights will 
+be modified while other may not in the same layer!
+
+Example of chosen weight kernel in a specific layer:
+
+
 
 ### First results:
 Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
