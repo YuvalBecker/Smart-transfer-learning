@@ -38,7 +38,16 @@ be modified while other may not in the same layer!
 
 Example of chosen weight kernel in a specific layer:
 
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_new.jpg)
 
+In the figure FMNIST dataset over VGG imagenet pretrained
+
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_pre.jpg)
+
+In the figure The same layer with imagenet data as input
+
+
+The activation maps are the ones the algorithm chose as meanningful between the 2 datasets. 
 
 ### First results:
 Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
