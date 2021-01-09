@@ -18,9 +18,9 @@ To run distribution calculations : `rg.run(stats_value = xx)`
 
 Run inside the training loop : 
 ```
-            loss = criterion(#Your inputs)
+            loss = criterion(#Your inputs) 
             loss.backward()
-            rg.update_grads(net)
+            rg.update_grads(network)
             optimizer.step()
 ``` 
             
@@ -36,7 +36,7 @@ distributions are more similar than the deeper layers.
 ** clarification: Distribution measurement is performed for every kernel in each layer - meanning , some kernel weights will 
 be modified while other may not in the same layer!
 
-Example of chosen weight kernel in a specific layer:
+Example of chosen weight kernelS in a specific layer:
 
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_new.jpg)
 
