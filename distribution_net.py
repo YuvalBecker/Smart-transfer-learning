@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 import torch
 from scipy.ndimage.filters import gaussian_filter
-
+import scipy
 
 def kl(p, q):
     p = np.abs(np.asarray(p, dtype=np.float) + 1e-9)
@@ -51,28 +51,66 @@ class CustomRequireGrad:
                 init_vec = np.concatenate([init_vec, vec], axis=1)
         return init_vec
 
-    @staticmethod
-    def _plot_distribution(ind_layer, layer_pretrained, layer_test, stats_val):
-        num_plots = 9
-        # Assuming log normal dist due to relu :
-        plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
-                    ind_layer % num_plots + 1)
-        values_pre, axis_val_pre = np.histogram(np.log(layer_pretrained), 100)
-        plt.plot(axis_val_pre[10:], values_pre[9:] / np.max(values_pre[10:]),
-                 linewidth=4, alpha=0.7, label='D')
-        values, axis_val = np.histogram(np.log(layer_test), 100)
-        plt.plot(axis_val[10:], values[9:] / np.max(values[10:]), linewidth=4,
-                 alpha=0.7, label='D2')
-        plt.legend()
-        plt.xlim([-5, 3])
-        plt.ylim([0, 1 + 0.1])
-        plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
-            stats_val, 2)))
+    def _plot_distribution(self, ind_layer, layer_pretrained, layer_test, stats_val=0,
+                           method='gram', kernel_num=0, folder_path=
+                           './distributions'):
+        if method != 'gram':
+            num_plots = 9
+            # Assuming log normal dist due to relu :
+            plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
+                        ind_layer % num_plots + 1)
+            values_pre, axis_val_pre = np.histogram(np.log(layer_pretrained),100)
+            plt.plot(axis_val_pre[10:], values_pre[9:] / np.max(values_pre[10:]),
+                     linewidth=4, alpha=0.7, label='D')
+            values, axis_val = np.histogram(np.log(layer_test), 100)
+            plt.plot(axis_val[10:], values[9:] / np.max(values[10:]), linewidth=4,
+                     alpha=0.7, label='D2')
+            plt.legend()
+            plt.xlim([-5, 3])
+            plt.ylim([0, 1 + 0.1])
+            plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
+                stats_val, 2)))
+        else:
+            if self.plot_counter < 24:
+                plt.figure(ind_layer, figsize = (20,20))
+                plt.subplot(8, 3, self.plot_counter + 1)
+                values, axis_val = np.histogram(layer_test, 100)
+                plt.plot(axis_val[10:], values[9:] / np.max(values[10:]),
+                         linewidth=4,
+                         alpha=0.7, label='Dtest')
+                minx_1 = np.min(axis_val[10:])
+                maxx_1 = np.max(axis_val[10:])
 
-    def __init__(self, net, pretrained_data_set, input_test):
+                values, axis_val = np.histogram(layer_pretrained, 100)
+                plt.plot(axis_val[10:],
+                         values[9:] / np.max(values[10:]),
+                         linewidth=4,
+                         alpha=0.7, label='Dpre')
+                minx_2 = np.min(axis_val[10:])
+                maxx_2 = np.max(axis_val[10:])
+
+                min_x = int(np.min([minx_2, minx_1])) - 0.5
+                max_x = int(np.max([maxx_1, maxx_2])) + 0.5
+
+                plt.legend()
+                plt.xlim([min_x, max_x])
+                plt.ylim([0, 1 + 0.1])
+                plt.title(' Kernel num : ' + str(
+                    kernel_num))
+                plt.suptitle('Layer number:' + str(ind_layer))
+                self.plot_counter += 1
+            else:
+                if self.plot_counter == 24:
+                    self.plot_counter += 1
+                    plt.savefig(folder_path+'/Layer_number_' +
+                                str(ind_layer)+'.jpg', dpi=900)
+                    plt.close()
+
+    def __init__(self, net, pretrained_data_set, input_test, max_layer=17):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
+        self.max_layer = max_layer
         self.activation = {}
 
     def plot_activation(self, name_layer, indexes, im_batch=0, save_path='.'):
@@ -97,9 +135,9 @@ class CustomRequireGrad:
         fig_new.clf()
         fig_pre.clf()
 
-    def update_grads(self, net, max_layer=8):
+    def update_grads(self, net):
         for ind, (name, module) in enumerate(net.named_modules()):
-            if ind > max_layer:
+            if ind > self.max_layer:
                 break
             if len(list(module.parameters())) > 0:  # weights
                 if len(self.layers_grad_mult[name]) > 0:
@@ -114,7 +152,6 @@ class CustomRequireGrad:
                 self.activation[name] = output.detach()
             except:
                 self.activation[name] = None
-
         return hook
 
     def _prepare_input_tensor(self):
@@ -173,23 +210,29 @@ class CustomRequireGrad:
 
                             values_gram_pre[ll] = self.gram_matrix(
                                 values_pre1[ll])
-                        if len(values_pre2[0]) > 20e3:
+                        if len(values_pre2[0]) > 200e3:
                             values_test2 = values_test2[:, np.random.randint(
                                 0, len(values_pre2[0]), size=4000)]
                             values_pre2 = values_pre2[:, np.random.randint(
                                 0, len(values_pre2[0]), size=4000)]
+                    if len(np.shape(self.gram_test[name])) == 0:
+                        self.gram_test[name] = values_gram_test
+                        self.gram_pre[name] = values_gram_pre
+                    else:
+                        self.gram_test[name] = np.concatenate(
+                            [self.gram_test[name], values_gram_test], axis=1)
+                        self.gram_pre[name] = np.concatenate(
+                            [self.gram_pre[name], values_gram_pre], axis=1)
 
-                    self.gram_test[name] += values_gram_test
-                    self.gram_pre[name] += values_gram_pre
+                    #self.gram_pre[name] += values_gram_pre
 
                     self.statistic_test[name].append(values_test2)
                     self.statistic_pretrained[name].append(values_pre2)
 
-    def _distribution_compare(self, test='kl', plot_dist=True):
+    def _distribution_compare(self, test='kl', plot_dist=False):
         for layer_test, layer_pretrained in (
                 zip(self.statistic_test.items(),
                     self.statistic_pretrained.items())):
-
             stats_value = []
             if not np.sum(layer_pretrained[1][0]) is None:  # has grads layers
                 layer_test_concat = self._concat_func(layer_test[1])
@@ -216,7 +259,7 @@ class CustomRequireGrad:
                 self.stats_value_per_layer[layer_test[0]] = stats_value
 
                 if plot_dist:
-                    self._plot_distribution(
+                    self._plot_distribution(method='kl',
                         ind_layer=1,
                         layer_pretrained=layer_pretrained[1],
                         layer_test=layer_test[1], stats_val=stats_value[-1])
@@ -226,27 +269,52 @@ class CustomRequireGrad:
     def _metric_compare(self):
         for ind, (name, module) in enumerate(self.network.named_modules()):
             stats_value = []
+            if ind > self.max_layer:
+                break
+            self.plot_counter = 0
             if np.size(self.gram_test[name]) > 1:  # check if has values
                 for ind_inside_layer, (test, pre) in enumerate(zip(
                         self.gram_test[name], self.gram_pre[name])):
-                    act_power_pre = np.mean(self.activations_input_pre[name][0]
-                                            [ind_inside_layer].cpu().numpy()**2)
-                    act_power_test = np.mean(self.activations_input_test[name]
-                                             [0][ind_inside_layer]
-                                             .cpu().numpy()**2)
-                    stats_value.append((1/(1e-9 + np.mean(np.abs(test - pre)))
-                                        )*(act_power_test*act_power_pre))
+                    if np.size(self.activations_input_pre[name][0]
+                               [ind_inside_layer].cpu().numpy()) > 1000:
+                        act_power_pre = np.mean(np.abs(self.activations_input_pre[name][0]
+                                                [ind_inside_layer].cpu().numpy()**2))
+                        act_power_test = np.mean(np.abs(self.activations_input_test[name]
+                                                 [0][ind_inside_layer].cpu().numpy()**2) )
+                        act_power_pre = np.where(act_power_pre > 0,
+                                                 act_power_pre, 1e-9)
+                        act_power_test = np.where(act_power_test > 0,
+                                                  act_power_test, 1e-9)
+
+                        #np.exp(-1*(np.mean(np.abs(test - pre))))
+                        stats_value.append(act_power_test/act_power_pre / smoothed_hist_kl_distance(test, pre) )
+                        #stats_value.append((1/(1e-9 + np.mean(np.abs(test - pre)))
+                        #                    )*(act_power_test*act_power_pre))
+                        plot = True
+                        if plot:
+                            self._plot_distribution(ind_layer=ind,
+                                                    layer_pretrained=pre,
+                                                    layer_test=test,
+                                                    kernel_num=ind_inside_layer, method='gram')
+                    else:
+                        stats_value = [1e-14]
+
+
             else:
-                stats_value = [1e-9]
+                stats_value = [1e-14]
                 self.stats_value_per_layer[name] = stats_value.copy()
             self.stats_value_per_layer[name] = stats_value.copy()
 
-    def _require_grad_search(self):
-        th_value = np.median([np.median(val)
+
+
+    def _require_grad_search(self, percent=85):
+        th_value = np.percentile([np.percentile(val, percent)
                               for key, val in
-                              self.stats_value_per_layer.items()])
+                              self.stats_value_per_layer.items()],percent)
         th_value = th_value*1
         for ind, (name, module) in enumerate(self.network.named_modules()):
+            if ind > self.max_layer:
+                break
             if (len(list(module.children()))) < 2 and np.size(
                     self.stats_value_per_layer[name]) > 1:
                 if ind < len(self.stats_value_per_layer):
@@ -264,7 +332,7 @@ class CustomRequireGrad:
                     print('layer: ' + name +
                           '  Similar distributions in activation '
                           'num: ' + str(change_inds))
-                    change_activations[change_inds] *= 1e-3
+                    change_activations[change_inds] *= 1e-2
                     for weight in module.parameters():
                         new_shape = np.shape(weight)
                         change_activations = np.reshape(
@@ -306,7 +374,7 @@ class CustomRequireGrad:
     def run(self, layer_eval_method='gram'):
         self._initialize_parameters()
         self._prepare_input_tensor()
-        self._calc_layers_outputs(batches_num=2)
+        self._calc_layers_outputs(batches_num=40)
         if layer_eval_method == 'gram':
             self._metric_compare()
         if layer_eval_method == 'distribution':
