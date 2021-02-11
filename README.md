@@ -10,6 +10,7 @@ This approach reduces overfitting by reducing the amount of variables and increa
 
 At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
 and compare between the 2 distributions by transforming to "normal" and use  kl divergence.
+Or by comparing between the distributions of gram matrixes , in order to reduce the localization dependancy.
 
 call the constructor : `rg = CustomRequireGrad(network, dataloader, dataloader2)`
 
@@ -17,9 +18,9 @@ To run distribution calculations : `rg.run(stats_value = xx)`
 
 Run inside the training loop : 
 ```
-            loss = criterion(#Your inputs)
+            loss = criterion(#Your inputs) 
             loss.backward()
-            rg.update_grads(net)
+            rg.update_grads(network)
             optimizer.step()
 ``` 
             
@@ -31,6 +32,22 @@ In order to change the specific weights grads
 
 In the figure - layers output distributions, compare between 2 datsets. we can see for intuition , that the first layers seems to have global feature extraction , therfor its output
 distributions are more similar than the deeper layers. 
+
+** clarification: Distribution measurement is performed for every kernel in each layer - meanning , some kernel weights will 
+be modified while other may not in the same layer!
+
+Example of chosen weight kernelS in a specific layer:
+
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_new.jpg)
+
+In the figure FMNIST dataset over VGG imagenet pretrained
+
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_pre.jpg)
+
+In the figure The same layer with imagenet data as input
+
+
+The activation maps are the ones the algorithm chose as meanningful between the 2 datasets. 
 
 ### First results:
 Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
