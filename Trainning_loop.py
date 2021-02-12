@@ -8,11 +8,12 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
 
-amount_data = 30
+amount_data = 500
 use_rg = True
 
 
-writer = SummaryWriter('./runds/change_grads_HHyp1er_diff111'
+
+writer = SummaryWriter('./runds/change_grads_HHyp1e11r_diff111'
                        + str(use_rg) + '_smaller_data_more_'
                        + str(amount_data)+'_samp')
 
@@ -28,23 +29,27 @@ if __name__ == "__main__":
 
     transform_rgb = transforms.Lambda(lambda image: image.convert('RGB'))
 
-    transform = transforms.Compose([transform_rgb, transforms.Resize((64, 64)),
+    transform2 = transforms.Compose([transform_rgb, transforms.Resize((64, 64)),
                                     transforms.ToTensor(),transforms.Normalize(
             (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    dataset_train = datasets.FashionMNIST(root='.', train=True, download=True,
+    #dataset_train = datasets.FashionMNIST(root='.', train=True, download=True,
+    #                                      transform=transform2)
+    dataset_train = datasets.CIFAR100(root='.', train=True, download=True,
                                           transform=transform)
+
     dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=4,
                                               shuffle=False)
 
     network = models.vgg19(pretrained=False).cuda()
     num_ftrs = network.classifier[6].in_features
     network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
-    vgg_cifar = torch.load('./model_cifar10')
+    vgg_cifar = torch.load('./model_cifar10_new')
     network.load_state_dict(vgg_cifar)
     # Adjusting output to 10 classes
     if use_rg:
         rg = CustomRequireGrad(network, dataloader, dataloader2)
         rg.run()
+    network.classifier[6] = nn.Linear(num_ftrs, 100).cuda()
 
     transform_rgb = transforms.Lambda(lambda image: image.convert('RGB'))
 
@@ -53,12 +58,20 @@ if __name__ == "__main__":
                                                          (0.5, 0.5, 0.5))])
     model = network
     batch_size= 8
-    testset = datasets.FashionMNIST(root='./data', train=False,
-                                           download=True, transform=transform_train)
+    #testset = datasets.FashionMNIST(root='./data', train=False,
+    #                                       download=True, transform=transform_train)
+    #testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    #                                         shuffle=False, num_workers=2)
+    #dataset_train = datasets.FashionMNIST(root='.',train=True,
+    #                                 download=False,transform=transform_train)
+    #trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
+    #                                         shuffle=False)
+    testset = datasets.CIFAR100(root='./data', train=False,
+                                           download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=2)
-    dataset_train = datasets.FashionMNIST(root='.',train=True,
-                                     download=False,transform=transform_train)
+    dataset_train = datasets.CIFAR100(root='.',train=True,
+                                     download=False,transform=transform)
     trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
                                              shuffle=False)
     classes = ('plane', 'car', 'bird', 'cat',
@@ -81,10 +94,10 @@ if __name__ == "__main__":
             loss = criterion(outputs, labels.cuda())
             loss.backward()
             if use_rg:
-                if epoch < 20:
+                if epoch < 25:
                     rg.update_grads(net)
-                if epoch > 20:
-                    optimizer.param_groups[0]['lr'] = 1e-4
+                if epoch > 25:
+                    optimizer.param_groups[0]['lr'] = 1e-5
             optimizer.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
@@ -96,7 +109,6 @@ if __name__ == "__main__":
             for data in testloader:
                 count += 1
                 images, labels = data
-
                 outputs = net(images.cuda())
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
