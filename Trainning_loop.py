@@ -8,12 +8,12 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
 
-amount_data = 500
-use_rg = True
+amount_data = 1000
+use_rg = False
 
 
 
-writer = SummaryWriter('./runds/change_grads_HHyp1e11r_diff111'
+writer = SummaryWriter('./runds/fft_grads'
                        + str(use_rg) + '_smaller_data_more_'
                        + str(amount_data)+'_samp')
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             loss = criterion(outputs, labels.cuda())
             loss.backward()
             if use_rg:
-                if epoch < 25:
+                if epoch < 35:
                     rg.update_grads(net)
                 if epoch > 25:
                     optimizer.param_groups[0]['lr'] = 1e-5

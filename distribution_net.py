@@ -8,15 +8,15 @@ from scipy.ndimage.filters import gaussian_filter
 import scipy
 
 def kl(p, q):
-    p = np.abs(np.asarray(p, dtype=np.float) + 1e-9)
-    q = np.abs(np.asarray(q, dtype=np.float) + 1e-9)
+    p = np.abs(np.asarray(p, dtype=np.float)+1e-15 )
+    q = np.abs(np.asarray(q, dtype=np.float) +1e-15 )
+    p = p/np.sum(p)
+    q = q/np.sum(q)
 
     return np.sum(np.where(p != 0, p * np.log(p / q), 0))
 
 
 def smoothed_hist_kl_distance(a, b, nbins=40, sigma=1):
-    a = np.clip(a,0, 2000000)
-    b = np.clip(b,0, 2000000)
 
     ahist, bhist = (np.histogram(a, bins=nbins)[0],
                     np.histogram(b, bins=nbins)[0])
@@ -28,9 +28,8 @@ def smoothed_hist_kl_distance(a, b, nbins=40, sigma=1):
 class CustomRequireGrad:
 
     @staticmethod
-    def gram_matrix(layer):
+    def fft_distribution(layer):
         fft_size = int( np.shape(layer)[2]/2)
-
         fft_out = np.abs(np.fft.fft2(layer))[:,0:fft_size,0:fft_size]
         return fft_out.ravel()
 
@@ -67,7 +66,7 @@ class CustomRequireGrad:
     def _plot_distribution(self, ind_layer, layer_pretrained, layer_test, stats_val=0,
                            method='gram', kernel_num=0,
                            folder_path=
-                           '/mnt/dota/dota/Temp/dist/'):
+                           '/mnt/dota/dota/Temp/dist/', pvalue=0):
         if method != 'gram':
             num_plots = 9
             # Assuming log normal dist due to relu :
@@ -110,17 +109,17 @@ class CustomRequireGrad:
                 plt.xlim([min_x, max_x])
                 plt.ylim([0, 1 + 0.1])
                 plt.title(' Kernel num : ' + str(
-                    kernel_num))
+                    kernel_num) +' p:'+str(pvalue))
                 plt.suptitle('Layer number:' + str(ind_layer))
                 self.plot_counter += 1
             else:
                 if self.plot_counter == 24:
                     self.plot_counter += 1
                     plt.savefig(folder_path+'/Layer_number_' +
-                                str(ind_layer)+'.jpg', dpi=900)
+                                str(ind_layer)+'.jpg', dpi=400)
                     plt.close()
 
-    def __init__(self, net, pretrained_data_set, input_test, max_layer=5):
+    def __init__(self, net, pretrained_data_set, input_test, max_layer=11):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
@@ -248,7 +247,7 @@ class CustomRequireGrad:
                             self.batch_size*fft_size**2))
  
                         ## seperating distribution per kernel
-                        # -> [#channels, #BatchSIze,#activation size (#,#) ] 
+                        # -> [#channels, #BatchSIze,#activation size (#,#) ]
                         values_pre1 = np.transpose(values_pre, [1, 0, 2, 3])
                         dist_pre_tot_size_per_channel = np.zeros(((np.shape(values_pre1)[0],
                                                  np.prod(np.shape(values_pre1)
@@ -257,10 +256,10 @@ class CustomRequireGrad:
                         for ll in range(np.shape(dist_new_channel_first)[0]):
                             dist_new_tot_size_per_channel[ll] = np.ravel(dist_new_channel_first[ll])
                             dist_pre_tot_size_per_channel[ll] = np.ravel(values_pre1[ll])
-                            values_gram_test[ll] = self.gram_matrix(
+                            values_gram_test[ll] = self.fft_distribution(
                                 dist_new_channel_first[ll])
 
-                            values_gram_pre[ll] = self.gram_matrix(
+                            values_gram_pre[ll] = self.fft_distribution(
                                 values_pre1[ll])
                         if len(dist_pre_tot_size_per_channel[0]) > 200e3:
                             dist_new_tot_size_per_channel = dist_new_tot_size_per_channel[:, np.random.randint(
@@ -271,13 +270,11 @@ class CustomRequireGrad:
                         self.gram_test[name] = values_gram_test
                         self.gram_pre[name] = values_gram_pre
                     else:
-                        self.gram_test[name] = np.concatenate(
-                            [self.gram_test[name], (np.abs(values_gram_test))], axis=1)
+                        clipped_log_gram = np.clip(
+                            (np.abs(values_gram_test)), -2e6, 2e6)
+                        self.gram_test[name] = np.concatenate([self.gram_test[name],clipped_log_gram], axis=1)
                         self.gram_pre[name] = np.concatenate(
-                            [self.gram_pre[name],(np.abs(values_gram_pre))], axis=1)
-
-                    #self.gram_pre[name] += values_gram_pre
-
+                            [self.gram_pre[name], np.clip(  (np.abs(values_gram_pre)), -2e6 ,2e6 )], axis=1)
                     self.statistic_test[name].append(dist_new_tot_size_per_channel)
                     self.statistic_pretrained[name].append(dist_pre_tot_size_per_channel)
 
@@ -337,15 +334,17 @@ class CustomRequireGrad:
                                                  act_power_pre, 0)
                         act_power_test = np.where(act_power_test > 1,
                                                   act_power_test, 0)
+                        test =np.log(test[test > 0])
+                        pre = np.log(pre[pre > 0])
+                        kl =(smoothed_hist_kl_distance(test, pre, nbins=200))
                         stats_value.append(
-                            (act_power_test)
-                            / (1+smoothed_hist_kl_distance(test, pre)))
+                           1 / (1+kl))
                         plot = True
                         if plot:
                             self._plot_distribution(ind_layer=ind,
                                                     layer_pretrained=pre,
                                                     layer_test=test,
-                                                    kernel_num=ind_inside_layer, method='gram')
+                                                    kernel_num=ind_inside_layer, method='gram',pvalue = kl)
                     else:
                         stats_value = [1e-14]
 
@@ -357,7 +356,7 @@ class CustomRequireGrad:
 
 
 
-    def _require_grad_search(self, percent=70):
+    def _require_grad_search(self, percent=72):
         th_value = np.percentile([np.percentile(val, percent)
                               for key, val in
                               self.stats_value_per_layer.items()],percent)
@@ -384,7 +383,7 @@ class CustomRequireGrad:
                     print('layer: ' + name +
                           '  Similar distributions in activation '
                           'num: ' + str(change_inds))
-                    change_activations[change_inds] *= 0.31
+                    change_activations[change_inds] *= 0.0031
                     for weight in module.parameters():
                         new_shape = np.shape(weight)
                         change_activations = np.reshape(
