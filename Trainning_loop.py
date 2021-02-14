@@ -8,9 +8,8 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
 
-amount_data = 1000
+amount_data = 200
 use_rg = False
-
 
 
 writer = SummaryWriter('./runds/fft_grads'
