@@ -117,12 +117,17 @@ class CustomRequireGrad:
                                 str(ind_layer)+'.jpg', dpi=400)
                     plt.close()
 
-    def __init__(self, net, pretrained_data_set, input_test, max_layer=17):
+    def __init__(self, net, pretrained_data_set, input_test,
+                 dist_processing_method='fft', batches_num=3, percent=90,
+                 deepest_layer=11):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
-        self.max_layer = max_layer
-        self.activation = {}    
+        self.max_layer = deepest_layer
+        self.dist_processing_method = dist_processing_method
+        self.num_batches = batches_num
+        self.threshold_percent = percent
+        self.activation = {}
         self.batch_size = self.pretrained_data_set.batch_size   
 
     def plot_activation(self, name_layer, indexes, im_batch=0,
@@ -193,7 +198,8 @@ class CustomRequireGrad:
         for ind, (name, module) in enumerate(self.network.named_modules()):
             if ind > self.max_layer:
                 break
-            if len(list(module._modules)) < 2 and 'weight' in module._parameters :  # Skip module modules
+            if len(list(module._modules)) < 2 and\
+                    'weight' in module._parameters :  # Skip module modules
                 self.name_list.append(name)
                 hooks[name] = module.register_forward_hook(
                     self.get_activation(name))
@@ -334,17 +340,17 @@ class CustomRequireGrad:
             self.stats_value_per_layer[name] = stats_value.copy()
 
     def _require_grad_search(self, percent=75, mult_grad_value=1e-3):
-        th_value = np.percentile([np.percentile(val, percent)for key, val in
-                                  self.stats_value_per_layer.items()], percent)
+        th_value = [np.percentile(val, percent)for key, val in
+                                  self.stats_value_per_layer.items()]
         dict_model = dict(self.network.named_modules())
-        for name in self.name_list:
+        for ind , name in enumerate(self.name_list):
             module = dict_model[name]
             if (len(list(module.children()))) < 2 and np.size(
                     self.stats_value_per_layer[name]) > 1:
                 change_activations = np.ones(np.shape(
                     self.stats_value_per_layer[name]))
                 change_inds = np.where((np.array(self.stats_value_per_layer[
-                                                     name]) > th_value) *
+                                                     name]) > th_value[ind]) *
                                        (np.array(self.stats_value_per_layer[
                                                      name]) < np.inf))[0]
                 if len(change_inds) > 1:
@@ -391,12 +397,12 @@ class CustomRequireGrad:
         self.mean_var_pretrained_data = []
         self.stats_value = []
 
-    def run(self, layer_eval_method='gram'):
+    def run(self):
         self._initialize_parameters()
         self._prepare_input_tensor()
-        self._calc_layers_outputs(batches_num=4)
-        if layer_eval_method == 'gram':
+        self._calc_layers_outputs(batches_num=self.num_batches)
+        if self.dist_processing_method == 'fft':
             self._metric_compare()
-        if layer_eval_method == 'distribution':
+        if self.dist_processing_method == 'distribution':
             self._distribution_compare()
-        self._require_grad_search()
+        self._require_grad_search(percent=self.threshold_percent)

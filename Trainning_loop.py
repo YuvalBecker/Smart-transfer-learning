@@ -7,13 +7,13 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
-batch_size = 10
+batch_size = 11
 num_b = 2
 amount_data = batch_size*num_b
 use_rg = True
 backbone_no_Grad = False
 
-writer = SummaryWriter('./runds/Fmnsit/usee_grads1DD12113'
+writer = SummaryWriter('./runds/Fmnsit/usee1_grads1DD12113'
                        + str(use_rg) + '_'
                        + str(amount_data)+'_samples')
 
@@ -47,7 +47,9 @@ if __name__ == "__main__":
     network.load_state_dict(vgg_cifar)
     # Adjusting output to 10 classes
     if use_rg:
-        rg = CustomRequireGrad(network, dataloader, dataloader2)
+        rg = CustomRequireGrad(network, dataloader, dataloader2,
+                               dist_processing_method='fft', batches_num=num_b,
+                               percent=55, deepest_layer=20)
         rg.run()
 
     if backbone_no_Grad:
