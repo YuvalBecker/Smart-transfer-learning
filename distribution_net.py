@@ -9,8 +9,8 @@ import scipy
 
 
 def kl(p, q):
-    p = np.abs(np.asarray(p, dtype=np.float)+1e-15 )
-    q = np.abs(np.asarray(q, dtype=np.float) +1e-15 )
+    p = np.abs(np.asarray(p, dtype=np.float) + 1e-15)
+    q = np.abs(np.asarray(q, dtype=np.float) + 1e-15)
     p = p/np.sum(p)
     q = q/np.sum(q)
 
@@ -21,9 +21,9 @@ def smoothed_hist_kl_distance(a, b, nbins=40, sigma=1):
 
     ahist, bhist = (np.histogram(a, bins=nbins)[0],
                     np.histogram(b, bins=nbins)[0])
-    asmooth, bsmooth = (gaussian_filter(ahist, sigma),
-                        gaussian_filter(bhist, sigma))
-    return kl(asmooth, bsmooth)
+    #asmooth, bsmooth = (gaussian_filter(ahist, sigma),
+              #          gaussian_filter(bhist, sigma))
+    return kl(ahist, bhist)
 
 
 class CustomRequireGrad:
@@ -117,7 +117,7 @@ class CustomRequireGrad:
                                 str(ind_layer)+'.jpg', dpi=400)
                     plt.close()
 
-    def __init__(self, net, pretrained_data_set, input_test, max_layer=11):
+    def __init__(self, net, pretrained_data_set, input_test, max_layer=17):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
@@ -149,11 +149,9 @@ class CustomRequireGrad:
         fig_pre.clf()
 
     def update_grads(self, net):
-        for ind, (name, module) in enumerate(net.named_modules()):
-            if len(list( module._modules) ) > 2:
-                continue
-            if ind > self.max_layer:
-                break
+        dict_model = dict(net.named_modules())
+        for name in self.name_list:
+            module = dict_model[name]
             if len(list(module.parameters())) > 0:  # weights
                 if len(self.layers_grad_mult[name]) > 0:
                     module.weight.grad *= torch.FloatTensor(
@@ -175,7 +173,7 @@ class CustomRequireGrad:
         self.input_test_iter = map(lambda v: v[0].cuda(), self.input_test)
 
     def _per_kernel_distribution(self,dist_new, values_pre):
-        import bm3d
+        #import bm3d
         output_new = np.zeros_like(dist_new)
         output_pre = np.zeros_like(dist_new)
         for batch in range(np.shape(dist_new)[0]):
@@ -190,11 +188,13 @@ class CustomRequireGrad:
         print(aa1/aa2)
 
     def _calc_layers_outputs(self, batches_num=10):
+        self.name_list = []
         hooks = {}
         for ind, (name, module) in enumerate(self.network.named_modules()):
             if ind > self.max_layer:
                 break
-            if len(list(module._modules)) < 2:  # Skip non relevant modules
+            if len(list(module._modules)) < 2 and 'weight' in module._parameters :  # Skip module modules
+                self.name_list.append(name)
                 hooks[name] = module.register_forward_hook(
                     self.get_activation(name))
         for ind_batch, (input_model, input_test) \
@@ -208,13 +208,10 @@ class CustomRequireGrad:
             self.activation = {}
             self.network(input_test)
             self.activations_input_test = self.activation.copy()
+
             values_gram_test = 0
             values_gram_pre = 0
-            for ind, (name, module) in enumerate(self.network.named_modules()):
-                if len(list(module._modules)) > 2:  # Skip non relevant modules
-                    continue
-                if ind > self.max_layer:
-                    break
+            for name in self.name_list:
                 if self.activations_input_test[name] is not None:
                     dist_new = np.abs(
                         self.activations_input_test[name].cpu().numpy() + 1e-4)
@@ -229,25 +226,20 @@ class CustomRequireGrad:
                         dist_new_tot_size_per_ch = np.zeros(((np.shape(dist_new_channel_first)[0],
                                                   np.prod(np.shape(dist_new_channel_first)
                                                           [1:]))))
-
                         # Required shape per channel:
                         fft_size = int(np.shape(dist_new)[2]/2)
-
                         values_gram_test = np.zeros((
                             np.shape(dist_new)[1],
                             self.batch_size*fft_size**2))
-
                         values_gram_pre = np.zeros((
                             np.shape(dist_new)[1],
                             self.batch_size*fft_size**2))
- 
                         ## seperating distribution per kernel
                         # -> [#channels, #BatchSIze,#activation size (#,#) ]
                         values_pre1 = np.transpose(values_pre, [1, 0, 2, 3])
                         dist_pre_tot_size_per_ch = np.zeros(((np.shape(values_pre1)[0],
                                                  np.prod(np.shape(values_pre1)
                                                          [1:]))))
-
                         for ll in range(np.shape(dist_new_channel_first)[0]):
                             dist_new_tot_size_per_ch[ll] =\
                                 np.ravel(dist_new_channel_first[ll])
@@ -315,12 +307,8 @@ class CustomRequireGrad:
                 self.stats_value_per_layer[layer_test[0]] = 0
 
     def _metric_compare(self):
-        for ind, (name, module) in enumerate(self.network.named_modules()):
-            if len(list( module._modules)) > 2:  # Skip non relevant modules
-                continue
+        for name in self.name_list:
             stats_value = []
-            if ind > self.max_layer:
-                break
             self.plot_counter = 0
             if np.size(self.gram_test[name]) > 1:  # check if has values
                 for ind_inside_layer, (test, pre) in enumerate(zip(
@@ -329,15 +317,15 @@ class CustomRequireGrad:
                                [ind_inside_layer].cpu().numpy()) > 1000:
                         test = np.log(test[test > 0])
                         pre = np.log(pre[pre > 0])
-                        kl_D = smoothed_hist_kl_distance(test, pre, nbins=200)
-                        stats_value.append(1 / (1+kl_D))
+                        KS = stats.ks_2samp(test, pre)[0]
+                        stats_value.append(KS)
                         plot = True
                         if plot:
-                            self._plot_distribution(ind_layer=ind,
+                            self._plot_distribution(ind_layer=int(name[name.find('.')+1:]),
                                                     layer_pretrained=pre,
                                                     layer_test=test,
                                                     kernel_num=ind_inside_layer,
-                                                    method='gram', pvalue=kl_D)
+                                                    method='gram', pvalue=KS)
                     else:
                         stats_value = [1e-14]
             else:
@@ -345,53 +333,47 @@ class CustomRequireGrad:
                 self.stats_value_per_layer[name] = stats_value.copy()
             self.stats_value_per_layer[name] = stats_value.copy()
 
-    def _require_grad_search(self, percent=70, mult_grad_value=1e-3):
+    def _require_grad_search(self, percent=75, mult_grad_value=1e-3):
         th_value = np.percentile([np.percentile(val, percent)for key, val in
                                   self.stats_value_per_layer.items()], percent)
-        for ind, (name, module) in enumerate(self.network.named_modules()):
-            if len(list(module._modules)) > 2:  # Skip non relevant modules
-                continue
-            if ind > self.max_layer:
-                break
+        dict_model = dict(self.network.named_modules())
+        for name in self.name_list:
+            module = dict_model[name]
             if (len(list(module.children()))) < 2 and np.size(
                     self.stats_value_per_layer[name]) > 1:
-                if ind < len(self.stats_value_per_layer):
-                    change_activations = np.ones(np.shape(
-                        self.stats_value_per_layer[name]))
-                    change_inds = np.where((np.array(self.stats_value_per_layer[
-                                                         name]) > th_value) *
-                                           (np.array(self.stats_value_per_layer[
-                                                         name]) < np.inf))[0]
-                    if len(change_inds) > 1:
-                        path_save = '/mnt/dota/dota/Temp/dist/activations/'
-                        self.plot_activation(name_layer=name,
-                                             indexes=change_inds,
-                                             im_batch=0, save_path=path_save)
-                    print('layer: ' + name +
-                          '  Similar distributions in activation '
-                          'num: ' + str(change_inds))
-                    change_activations[change_inds] *= mult_grad_value
-                    for weight in module.parameters():
-                        new_shape = np.shape(weight)
+                change_activations = np.ones(np.shape(
+                    self.stats_value_per_layer[name]))
+                change_inds = np.where((np.array(self.stats_value_per_layer[
+                                                     name]) > th_value) *
+                                       (np.array(self.stats_value_per_layer[
+                                                     name]) < np.inf))[0]
+                if len(change_inds) > 1:
+                    path_save = '/mnt/dota/dota/Temp/dist/activations/'
+                    self.plot_activation(name_layer=name,
+                                         indexes=change_inds,
+                                         im_batch=0, save_path=path_save)
+                print('layer: ' + name +
+                      '  Similar distributions in activation '
+                      'num: ' + str(change_inds))
+                change_activations[change_inds] *= mult_grad_value
+                for weight in module.parameters():
+                    new_shape = np.shape(weight)
+                    change_activations = np.reshape(
+                        change_activations,
+                        (len(change_activations), 1, 1, 1))
+                    if len(new_shape) > 2:
+                        self.layers_grad_mult[name]['weights'] = {}
                         change_activations = np.reshape(
                             change_activations,
                             (len(change_activations), 1, 1, 1))
-                        if len(new_shape) > 2:
-                            self.layers_grad_mult[name]['weights'] = {}
-                            change_activations = np.reshape(
-                                change_activations,
-                                (len(change_activations), 1, 1, 1))
-                            self.layers_grad_mult[name]['weights'] = np.tile(
-                                change_activations, (
-                                    1, new_shape[1], new_shape[2],
-                                    new_shape[3]))
-                        else:
-                            self.layers_grad_mult[name]['bias'] = {}
-                            self.layers_grad_mult[name][
-                                'bias'] = change_activations
-                else:
-                    for _ in module.parameters():
-                        self.layers_grad_mult[ind] = None
+                        self.layers_grad_mult[name]['weights'] = np.tile(
+                            change_activations, (
+                                1, new_shape[1], new_shape[2],
+                                new_shape[3]))
+                    else:
+                        self.layers_grad_mult[name]['bias'] = {}
+                        self.layers_grad_mult[name][
+                            'bias'] = change_activations
 
     def _initialize_parameters(self):
         self.outputs_list = defaultdict(int)
@@ -412,7 +394,7 @@ class CustomRequireGrad:
     def run(self, layer_eval_method='gram'):
         self._initialize_parameters()
         self._prepare_input_tensor()
-        self._calc_layers_outputs(batches_num=50)
+        self._calc_layers_outputs(batches_num=4)
         if layer_eval_method == 'gram':
             self._metric_compare()
         if layer_eval_method == 'distribution':

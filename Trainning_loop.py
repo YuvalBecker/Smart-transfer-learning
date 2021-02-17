@@ -7,14 +7,15 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
+batch_size = 10
+num_b = 2
+amount_data = batch_size*num_b
+use_rg = True
+backbone_no_Grad = False
 
-amount_data = 200
-use_rg = False
-
-
-writer = SummaryWriter('./runds/fft_grads'
-                       + str(use_rg) + '_smaller_data_more_'
-                       + str(amount_data)+'_samp')
+writer = SummaryWriter('./runds/Fmnsit/usee_grads1DD12113'
+                       + str(use_rg) + '_'
+                       + str(amount_data)+'_samples')
 
 if __name__ == "__main__":
     transform = transforms.Compose([transforms.Resize((64, 64)),
@@ -23,7 +24,7 @@ if __name__ == "__main__":
 
     dataset_first = datasets.CIFAR10(root='.', train=True, download=True,
                                      transform=transform)
-    dataloader = torch.utils.data.DataLoader(dataset_first, batch_size=4,
+    dataloader = torch.utils.data.DataLoader(dataset_first, batch_size=batch_size,
                                               shuffle=False)
 
     transform_rgb = transforms.Lambda(lambda image: image.convert('RGB'))
@@ -31,24 +32,28 @@ if __name__ == "__main__":
     transform2 = transforms.Compose([transform_rgb, transforms.Resize((64, 64)),
                                     transforms.ToTensor(),transforms.Normalize(
             (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    dataset_train = datasets.FashionMNIST(root='.', train=True, download=True,
+                                          transform=transform2)
     #dataset_train = datasets.FashionMNIST(root='.', train=True, download=True,
-    #                                      transform=transform2)
-    dataset_train = datasets.CIFAR100(root='.', train=True, download=True,
-                                          transform=transform)
+     #                                     transform=transform)
 
-    dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=4,
+    dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
                                               shuffle=False)
 
-    network = models.vgg19(pretrained=False).cuda()
+    network = models.vgg19(pretrained=True).cuda()
     num_ftrs = network.classifier[6].in_features
     network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
-    vgg_cifar = torch.load('./model_cifar10_new')
+    vgg_cifar = torch.load('/mnt/dota/dota/Temp/new_pretrained/model_cifar10_new')
     network.load_state_dict(vgg_cifar)
     # Adjusting output to 10 classes
     if use_rg:
         rg = CustomRequireGrad(network, dataloader, dataloader2)
         rg.run()
-    network.classifier[6] = nn.Linear(num_ftrs, 100).cuda()
+
+    if backbone_no_Grad:
+        for param in network.features.parameters():
+            param.requires_grad = False
+    network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
 
     transform_rgb = transforms.Lambda(lambda image: image.convert('RGB'))
 
@@ -56,29 +61,29 @@ if __name__ == "__main__":
                                     transforms.ToTensor(),transforms.Normalize((0.5, 0.5, 0.5),
                                                          (0.5, 0.5, 0.5))])
     model = network
-    batch_size= 8
-    #testset = datasets.FashionMNIST(root='./data', train=False,
-    #                                       download=True, transform=transform_train)
-    #testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-    #                                         shuffle=False, num_workers=2)
-    #dataset_train = datasets.FashionMNIST(root='.',train=True,
-    #                                 download=False,transform=transform_train)
-    #trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
-    #                                         shuffle=False)
-    testset = datasets.CIFAR100(root='./data', train=False,
-                                           download=True, transform=transform)
+    testset = datasets.FashionMNIST(root='./data', train=False,
+                                           download=True, transform=transform_train)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=2)
-    dataset_train = datasets.CIFAR100(root='.',train=True,
-                                     download=False,transform=transform)
+    dataset_train = datasets.FashionMNIST(root='.',train=True,
+                                     download=False,transform=transform_train)
     trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
                                              shuffle=False)
-    classes = ('plane', 'car', 'bird', 'cat',
-               'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+    #testset = datasets.CIFAR100(root='./data', train=False,
+    #                                       download=True, transform=transform)
+    #testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    #                                         shuffle=False, num_workers=2)
+    #dataset_train = datasets.CIFAR100(root='.',train=True,
+    #                                 download=False,transform=transform)
+    #trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
+    #                                         shuffle=False)
+
     net = network
     criterion = nn.CrossEntropyLoss()
-
     optimizer = optim.SGD(net.parameters(), lr=1e-3, momentum=0.9)
+    cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, 1e-3, 5e-3,
+                                      step_size_up=100)
+
     accuracy = []
     loss = []
     for epoch in range(40):  # loop over the dataset multiple times
@@ -88,6 +93,7 @@ if __name__ == "__main__":
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
+            #plt.imshow(inputs.detach().cpu().numpy()[0].transpose())
             optimizer.zero_grad()
             outputs = net(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
@@ -95,9 +101,10 @@ if __name__ == "__main__":
             if use_rg:
                 if epoch < 35:
                     rg.update_grads(net)
-                if epoch > 25:
-                    optimizer.param_groups[0]['lr'] = 1e-5
+                #if epoch > 25:
+                  #  optimizer.param_groups[0]['lr'] = 1e-5
             optimizer.step()
+            cycle_opt.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
               (epoch + 1, i + 1, running_loss / i))
@@ -122,6 +129,9 @@ if __name__ == "__main__":
                            epoch)
         writer.add_scalar('Train - Loss',
                           (running_loss / i),
+                           epoch)
+        writer.add_scalar('LR',
+                          (optimizer.param_groups[0]['lr']),
                            epoch)
 
         accuracy.append((epoch,100 * correct / total ))
