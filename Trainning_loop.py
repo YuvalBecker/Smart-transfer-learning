@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from distribution_net import CustomRequireGrad
-batch_size = 11
+batch_size = 20
 num_b = 2
 amount_data = batch_size*num_b
 use_rg = True
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     if use_rg:
         rg = CustomRequireGrad(network, dataloader, dataloader2,
                                dist_processing_method='fft', batches_num=num_b,
-                               percent=55, deepest_layer=20)
+                               percent=80, deepest_layer=20)
         rg.run()
 
     if backbone_no_Grad:
