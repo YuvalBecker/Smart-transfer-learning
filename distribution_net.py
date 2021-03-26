@@ -15,12 +15,9 @@ def kl(p, q):
 
     return np.sum(np.where(p != 0, p * np.log(p / q), 0))
 
-def smoothed_hist_kl_distance(a, b, nbins=40, sigma=1):
-
+def smoothed_hist_kl_distance(a, b, nbins=40):
     ahist, bhist = (np.histogram(a, bins=nbins)[0],
                     np.histogram(b, bins=nbins)[0])
-    #asmooth, bsmooth = (gaussian_filter(ahist, sigma),
-              #          gaussian_filter(bhist, sigma))
     return kl(ahist, bhist)
 
 class CustomRequireGrad:
@@ -45,7 +42,7 @@ class CustomRequireGrad:
                 init_vec = np.concatenate([init_vec, vec], axis=1)
         return init_vec
 
-    class prior_preprocess:
+    class PriorPreprocess:
         def __init__(self,  method='fft', shape_act=None,**kwargs):
             self.__dict__.update(kwargs)
             self.method = method
@@ -61,22 +58,23 @@ class CustomRequireGrad:
 
         def initialize_list(self):
             if self.method == 'fft':
-                self.fft_size = int(self.shape_act[2]/2)
+                self.fft_size = int(self.shape_act[2]/10)
                 values_post_test = np.zeros((
                     self.shape_act[1],
-                    self.batch_size * self.fft_size ** 2))
+                    1 * self.fft_size ** 2))
                 values_post_pre = np.zeros((
                     self.shape_act[1],
-                    self.batch_size * self.fft_size ** 2))
+                    1 * self.fft_size ** 2))
                 return values_post_test, values_post_pre
             if self.method == 'linear':
                 values_post_pre = np.zeros(((self.shape_act[1], self.shape_act[0] * np.prod(self.shape_act[2:]))))
                 values_post_test = np.zeros(((self.shape_act[1], self.shape_act[0] * np.prod(self.shape_act[2:]))))
                 return values_post_test, values_post_pre
 
-        def fft_distribution(self,layer):
+        def fft_distribution(self, layer):
             fft_out = np.abs(np.fft.fft2(layer))[:, 0:self.fft_size, 0:self.fft_size]
-            return fft_out.ravel()
+            mean_fft = np.mean(np.log(np.abs(fft_out+1e-8))  ,axis=0)
+            return mean_fft.ravel()
 
         @staticmethod
         def gram_matrix1(layer):
@@ -258,7 +256,7 @@ class CustomRequireGrad:
                                                   np.prod(np.shape(dist_new_channel_first)
                                                           [1:]))))
                         # Required shape per channel:
-                        transform_prior = self.prior_preprocess(method='fft', shape_act=np.shape(dist_new),**self.__dict__)
+                        transform_prior = self.PriorPreprocess(method='fft', shape_act=np.shape(dist_new), **self.__dict__)
                         values_post_test, values_post_pre = transform_prior.initialize_list()
 
                         ## seperating distribution per kernel
@@ -354,6 +352,9 @@ class CustomRequireGrad:
                                 sim = kl(test_in, pre_in)
                             if self.similarity =='ws':
                                 sim = 1 / scipy.stats.wasserstein_distance(test_in, pre_in)
+                            if self.similarity == 'euclidian':
+                                sim = np.sum(np.abs(test) + np.abs(pre)) / (np.sum(np.abs(test - pre)) + 1e-8)
+
                         else: # non sufficient points mark as non similarity
                             sim = -1
                         self._plot_distribution(ind_layer=int(ind_layer),
@@ -385,7 +386,7 @@ class CustomRequireGrad:
                     self.stats_value_per_layer[name]) > 1:
                 change_activations = np.ones(np.shape(
                     self.stats_value_per_layer[name]))
-                if th_value[ind] > 0.01:
+                if th_value[ind] > 0:
                     change_inds = np.where((np.array(self.stats_value_per_layer[
                                                          name]) > th_value[ind]) *
                                            (np.array(self.stats_value_per_layer[
