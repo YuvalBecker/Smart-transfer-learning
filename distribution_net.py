@@ -4,7 +4,6 @@ from scipy import stats
 import matplotlib.pyplot as plt
 import os
 import torch
-from scipy.ndimage.filters import gaussian_filter
 import scipy
 
 def kl(p, q):
@@ -15,7 +14,7 @@ def kl(p, q):
 
     return np.sum(np.where(p != 0, p * np.log(p / q), 0))
 
-def smoothed_hist_kl_distance(a, b, nbins=40):
+def smoothed_hist_kl_distance(a, b, nbins=20):
     ahist, bhist = (np.histogram(a, bins=nbins)[0],
                     np.histogram(b, bins=nbins)[0])
     return kl(ahist, bhist)
@@ -58,7 +57,7 @@ class CustomRequireGrad:
 
         def initialize_list(self):
             if self.method == 'fft':
-                self.fft_size = int(self.shape_act[2]/10)
+                self.fft_size = int(self.shape_act[2]/2)
                 values_post_test = np.zeros((
                     self.shape_act[1],
                     1 * self.fft_size ** 2))
@@ -86,7 +85,8 @@ class CustomRequireGrad:
 
     def _plot_distribution(self, ind_layer, layer_pretrained, layer_test,
                            stats_val=0,method='gram', kernel_num=0,save_path=
-                           './images_dist/', pvalue=0,num_plots = 20):
+                           './images_dist/', pvalue=0, num_plots = 20, ax_sub=None):
+
         if method != 'gram':
             # Assuming log normal dist due to relu :
             plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
@@ -103,17 +103,16 @@ class CustomRequireGrad:
             plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
                 stats_val, 2)),fontsize=7)
         else:
-            plt.figure(ind_layer, figsize = (20,20))
-            plt.subplot(8, 3, self.plot_counter + 1)
+
             values, axis_val = np.histogram(layer_test, 100)
-            plt.plot(axis_val[10:], values[9:] / np.max(values[10:]),
+            ax_sub[self.plot_counter ].plot(axis_val[10:], values[9:] / np.max(values[10:]),
                      linewidth=4,
                      alpha=0.7, label='Dtest')
             minx_1 = np.min(axis_val[10:])
             maxx_1 = np.max(axis_val[10:])
 
             values, axis_val = np.histogram(layer_pretrained, 100)
-            plt.plot(axis_val[10:],
+            ax_sub[self.plot_counter].plot(axis_val[10:],
                      values[9:] / np.max(values[10:]),
                      linewidth=4,
                      alpha=0.7, label='Dpre')
@@ -123,7 +122,7 @@ class CustomRequireGrad:
             min_x = int(np.min([minx_2, minx_1])) - 0.5
             max_x = int(np.max([maxx_1, maxx_2])) + 0.5
 
-            plt.legend()
+            ax_sub[self.plot_counter].legend()
             plt.xlim([min_x, max_x])
             plt.ylim([0, 1 + 0.1])
             plt.title(' Kernel num : ' + str(
@@ -133,7 +132,7 @@ class CustomRequireGrad:
             self.plot_counter +=1
 
     def __init__(self, net, pretrained_data_set, input_test,
-                 dist_processing_method='fft', batches_num=3, percent=70,
+                 dist_processing_method='fft', batches_num=10, percent=70,
                  deepest_layer=11,similarity = 'ws', save_folder='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained'):
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
@@ -147,12 +146,11 @@ class CustomRequireGrad:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.similarity = similarity
         self.save_folder = save_folder
+
     def plot_activation(self, name_layer, indexes, im_batch=1,
                         save_path=None):
         num_kernels = np.size(indexes)
         num_per_axis = int(np.ceil(np.sqrt(num_kernels)))
-        fig_pre = plt.figure(1)
-        fig_new = plt.figure(2)
         for i, index in enumerate(indexes):
             fig_pre = plt.figure(1)
             plt.subplot(num_per_axis, num_per_axis,i + 1)
@@ -170,6 +168,7 @@ class CustomRequireGrad:
         fig_new.clf()
         fig_pre.clf()
         plt.close('all')
+
     def update_grads(self, net):
         dict_model = dict(net.named_modules())
         for name in self.modules_name_list:
@@ -185,7 +184,7 @@ class CustomRequireGrad:
         def hook(_, __, output):
             try:
                 self.activation[name] = output.detach().cpu().numpy().copy()
-                if (np.sum(np.abs(output.detach().numpy()) <=1e-8  ) > 10):
+                if (np.sum(np.abs(output.detach().cpu().numpy()) <=1e-8  ) > 10):
                     print('errr')
 
             except:
@@ -208,7 +207,8 @@ class CustomRequireGrad:
             #if ind > self.max_layer:
             #    break
             # body.2.conv2
-
+            if ind > self.max_layer:
+                break
             if len(list(module._modules)) < 2 and\
                     'weight' in module._parameters and 'Conv'  in module._get_name() :  # Skip module modules
                 self.modules_name_list.append(name)
@@ -226,15 +226,15 @@ class CustomRequireGrad:
                 break
             self.activation = {} # clear all activations every batch
 
-            bp_flage =True # Only for bpc use :
+            bp_flage =False # Only for bpc use :
             if bp_flage == True:
                 bp = input_model[1]
                 bp = bp.to(self.device, dtype=torch.float)
                 bp_test = input_test[1]
                 bp_test = bp_test.to(self.device, dtype=torch.float)
             else:
-                bp = input_model
-                bp_test = input_test
+                bp = input_model[0].to(self.device, dtype=torch.float)
+                bp_test = input_test[0].to(self.device, dtype=torch.float)
 
             self.network(bp)
             self.activations_input_pre = self.activation.copy()
@@ -256,7 +256,7 @@ class CustomRequireGrad:
                                                   np.prod(np.shape(dist_new_channel_first)
                                                           [1:]))))
                         # Required shape per channel:
-                        transform_prior = self.PriorPreprocess(method='fft', shape_act=np.shape(dist_new), **self.__dict__)
+                        transform_prior = self.PriorPreprocess(method='linear', shape_act=np.shape(dist_new), **self.__dict__)
                         values_post_test, values_post_pre = transform_prior.initialize_list()
 
                         ## seperating distribution per kernel
@@ -329,23 +329,29 @@ class CustomRequireGrad:
                     self._plot_distribution(method='kl',
                         ind_layer=1,
                         layer_pretrained=layer_pretrained[1],
-                        layer_test=layer_test[1],save_path='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained/dist/', stats_val=stats_value[-1])
+                        layer_test=layer_test[1],save_path='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained/dist/', stats_val=stats_value[-1],ax_sub=ax_sub)
             else:
                 self.stats_value_per_layer[layer_test[0]] = 0
 
     def _metric_compare(self):
         for ind_layer, name in enumerate(self.modules_name_list):
+            if ind_layer > self.max_layer:
+                break
+            num_plots = np.shape(self.gram_pre[name])[0]
+            fig = plt.figure(ind_layer, figsize=(20, 20))
+            ax_sub = fig.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))))
+            ax_sub = ax_sub.ravel()
             stats_value = []
             self.plot_counter = 0
             if np.size(self.gram_test[name]) > 1:  # check if has values
                 for ind_inside_layer, (test, pre) in enumerate(zip(
                         self.gram_test[name], self.gram_pre[name])):
-                    if np.size(self.activations_input_pre[name][0][ind_inside_layer]) > 1000:
+                    if np.size(self.activations_input_pre[name][0][ind_inside_layer]) > 20:
                         ## Convert from log normal to normal distribution. (assumtion been made)
                         test_in = np.log(np.abs(test[test > 1e-7]))
                         pre_in =  np.log(np.abs(pre[pre > 1e-7]))
                         ## Similarity units! regardless of the test
-                        if len(test_in) > 1000 and len(pre_in) > 1000: # Chekck there are enought values for statistics
+                        if len(test_in) > 20 and len(pre_in) > 20: # Chekck there are enought values for statistics
                             if self.similarity == 'KS':
                                 sim = 1/stats.ks_2samp(test_in, pre_in)[0]
                             if self.similarity == 'kl':
@@ -361,7 +367,7 @@ class CustomRequireGrad:
                                                 layer_pretrained=pre_in,
                                                 layer_test=test_in,
                                                 kernel_num=ind_inside_layer,
-                                                method='gram',save_path=self.save_folder + '/dist/', pvalue=sim)
+                                                method='gram', save_path=self.save_folder + '/dist/', pvalue=sim, num_plots=num_plots,ax_sub=ax_sub)
                     else:
                         sim = [-1]
                     stats_value.append(sim)
@@ -370,17 +376,19 @@ class CustomRequireGrad:
                 self.stats_value_per_layer[name] = stats_value.copy()
             self.stats_value_per_layer[name] = stats_value.copy()
             ### Finished layer loop over kernels :
-            if not os.path.exists(self.save_folder + '/dist/'):
-                os.makedirs(self.save_folder + '/dist/')
-            plt.savefig(self.save_folder + '/dist/' + '/Layer_number_' +
+            if not os.path.exists(self.save_folder + '//dist/'):
+                os.makedirs(self.save_folder + '//dist/')
+            plt.savefig(self.save_folder + '//dist/' + '//Layer_number_' +
                         str(ind_layer) + '.jpg', dpi=400)
             plt.close()
 
-    def _require_grad_search(self, percent=45, mult_grad_value=1e-3):
+    def _require_grad_search(self, percent=25, mult_grad_value=1e-3):
         th_value = [np.percentile(val, percent)for key, val in
                                   self.stats_value_per_layer.items()]
         dict_model = dict(self.network.named_modules())
         for ind , name in enumerate(self.modules_name_list):
+            if ind > self.max_layer:
+                break
             module = dict_model[name]
             if (len(list(module.children()))) < 2 and np.size(
                     self.stats_value_per_layer[name]) > 1:
@@ -412,9 +420,7 @@ class CustomRequireGrad:
                             change_activations,
                             (len(change_activations), 1, 1, 1))
                         self.layers_grad_mult[name]['weights'] = np.tile(
-                            change_activations, (
-                                1, new_shape[1], new_shape[2],
-                                new_shape[3]))
+                            change_activations, (1, new_shape[1], new_shape[2], new_shape[3]))
                     else:
                         self.layers_grad_mult[name]['bias'] = {}
                         self.layers_grad_mult[name][
