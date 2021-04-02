@@ -15,23 +15,38 @@ transform = transforms.Compose([transforms.ToTensor(),transforms.Resize((64, 64)
 class Simple_Net(nn.Module):
     def __init__(self):
         super(Simple_Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, 7)
-        self.batch_norm1 = nn.BatchNorm2d(10)
+        self.conv1 = nn.Conv2d(1, 100, 7)
+        self.batch_norm1 = nn.BatchNorm2d(100)
         self.pool = nn.MaxPool2d(2, 2)
-        self.batch_norm2 = nn.BatchNorm2d(10)
-        self.conv2 = nn.Conv2d(10 ,10, 3)
-        self.conv3 = nn.Conv2d(10, 10, 3)
-        self.fc1 = nn.Linear(10 * 11 * 11, 10)
+        self.batch_norm2 = nn.BatchNorm2d(100)
+        self.conv2 = nn.Conv2d(100 ,100, 3)
+        self.conv3 = nn.Conv2d(100, 100, 3)
+        self.fc1 = nn.Linear(100 * 11 * 11, 10)
 
     def forward(self, x):
         x = self.pool(self.batch_norm1(F.relu(self.conv1(x))))
         x = self.pool(self.batch_norm2(F.relu(self.conv2(x))))
         x = F.relu(self.conv3(x))
-        x = x.view(-1, 10 * 11 * 11)
+        x = x.view(-1, 100 * 11 * 11)
         x = F.sigmoid(self.fc1(x))
         return x
 
+class diff_net(Simple_Net):
+    def __init__(self):
+        super(diff_net, self).__init__()
+        self.group_n_0 = torch.nn.GroupNorm(1, 1, eps=1e-05, affine=True)
+        self.group_n_1 = torch.nn.GroupNorm(4, 100, eps=1e-05, affine=True)
+        self.group_n_1 = torch.nn.GroupNorm(4, 100, eps=1e-05, affine=True)
+        self.group_n_2 = torch.nn.GroupNorm(4, 100, eps=1e-05, affine=True)
 
+    def forward(self, x):
+
+        x = self.pool(self.batch_norm1(F.relu(self.conv1(self.group_n_0(x)))))
+        x = self.pool(self.batch_norm2(F.relu(self.conv2(self.group_n_1(x)))))
+        x = F.relu(self.conv3(self.group_n_2(x)))
+        x = x.view(-1, 100 * 11 * 11)
+        x = F.sigmoid(self.fc1(x))
+        return x
 
 
 if __name__ == '__main__':

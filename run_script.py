@@ -5,12 +5,12 @@ from torchvision import models
 from torch.utils.tensorboard import SummaryWriter
 
 import torch.optim as optim
-from trainning_net import  Simple_Net
+from trainning_net import  Simple_Net, diff_net
 from distribution_net import CustomRequireGrad
 import argparse
 
 def main(args):
-
+    torch.cuda.manual_seed_all(args.seed)
     batch_size = args.batch_size
     num_b = args.num_batch
     amount_data =num_b*batch_size
@@ -20,7 +20,7 @@ def main(args):
                                         transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5),
                                                                                     (0.5, 0.5, 0.5))])
         dataset_pre = datasets.CIFAR10(root='.', train=True, download=True,transform=transform)
-        dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,shuffle=True)
+        dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,shuffle=False)
 
     if args.pre_dataset == 'KMNIST':
         transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),
@@ -43,7 +43,7 @@ def main(args):
         dataset_train = datasets.CIFAR10(root='.', train=True,
                                          download=True, transform=transform)
         trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
-                                                  shuffle=False)
+                                                  shuffle=True)
 
     if args.test_dataset == 'FMNIST':
         transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),
@@ -83,36 +83,39 @@ def main(args):
     if args.pre_model == 'simple':
         network = Simple_Net().to(args.device)
         network.load_state_dict(torch.load(args.pre_model_path), strict=False)
-    else:
-        if args.pre_model == 'vgg':
-            network = models.vgg19(pretrained=True).to(args.device)
+    if args.pre_model == 'vgg':
+        network = models.vgg19(pretrained=True).to(args.device)
+    if args.pre_model == 'diff_simple':
+        network = diff_net().to(args.device)
+        network.load_state_dict(torch.load(args.pre_model_path), strict=False)
 
     if args.with_custom_grad:
         rg = CustomRequireGrad(net=network,pretrained_data_set= dataloader_pre, input_test= dataloader_new,
                                dist_processing_method='fft', batches_num=args.num_batch_analysis,
-                               percent=args.percent, deepest_layer=7,
-                               save_folder=args.folder_save_stats + str(args.num_run))
+                               percent=args.percent, deepest_layer=args.deepest_layer,
+                               save_folder=args.folder_save_stats + str(args.num_run),
+                               process_method=args.process_method, similarity=args.similarity_func)
         rg.run()
         ############# running training session :
 
     net = network
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
-    cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr, args.lr*10,
-                                                  step_size_up=100)
+    #cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr, args.lr*10,
+      #                                            step_size_up=100)
 
     writer = SummaryWriter(args.folder_save_stats+str(args.num_run)+'/'+ str(args.with_custom_grad) + '_' + str(amount_data) + '_samples')
     accuracy = []
 
     dict_a =args.__dict__
-    with open(r'./all_runs/' + str(args.num_run) + '/config_run.csv', 'w') as f:
+    with open(args.folder_save_stats+str(args.num_run)+'/'+ str(args.with_custom_grad) + '_' + str(amount_data) + '_samples'+ '_config_run.csv', 'w') as f:
         for key in dict_a.keys():
             f.write("%s,%s\n" % (key, dict_a[key]))
 
     for epoch in range(args.num_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
-        for i, data in enumerate(trainloader, 0):
-            if i >= amount_data / batch_size:
+        for i, data in enumerate(trainloader, args.seed):
+            if i-args.seed >= amount_data / batch_size:
                 break
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -125,7 +128,7 @@ def main(args):
                 if epoch < 35:
                     rg.update_grads(net)
             optimizer.step()
-            cycle_opt.step()
+            #cycle_opt.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
               (epoch + 1, i + 1, running_loss / i))
@@ -140,7 +143,7 @@ def main(args):
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += np.array((predicted.detach().cpu() == labels)).sum()
-                if count > 1000:
+                if count > 4000:
                     break
         print(
             'Accuracy of the network on the 10000 test images: %d %%' % (
@@ -159,24 +162,28 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_run', type=int, default=1)
+    parser.add_argument('--num_run', type=int, default=14)
+    parser.add_argument('--seed', type=int, default=10)
 
     #model:
-    parser.add_argument('--pre_model', type=str, default='simple')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model39')
+    parser.add_argument('--pre_model', type=str, default='diff_simple')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model10')
     parser.add_argument('--pre_dataset', type=str, default='KMNIST')
-    parser.add_argument('--test_dataset', type=str, default='MNIST')
+    parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
     parser.add_argument('--with_custom_grad', type=bool, default=False)
-    parser.add_argument('--percent', type=int, default=70)
-    parser.add_argument('--num_batch_analysis', type=int, default=20)
+    parser.add_argument('--percent', type=int, default=50)
+    parser.add_argument('--num_batch_analysis', type=int, default=200)
     parser.add_argument('--folder_save_stats', type=str, default=r'./all_runs/')
+    parser.add_argument('--process_method', type=str, default='fft')
+    parser.add_argument('--deepest_layer', type=int, default=8)
+    parser.add_argument('--similarity_func', type=str, default='ws')
 
     # Training
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--batch_size', type=int, default=10)
-    parser.add_argument('--num_batch', type=int, default=4)
-    parser.add_argument('--num_epochs', type=int, default=25)
-    parser.add_argument('--lr', type=float, default=4e-3)
+    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--num_batch', type=int, default=2)
+    parser.add_argument('--num_epochs', type=int, default=40)
+    parser.add_argument('--lr', type=float, default=8e-3)
     main(parser.parse_args())

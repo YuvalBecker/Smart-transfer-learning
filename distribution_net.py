@@ -84,8 +84,7 @@ class CustomRequireGrad:
             return val / np.shape(layer)[0]
 
     def _plot_distribution(self, ind_layer, layer_pretrained, layer_test,
-                           stats_val=0,method='gram', kernel_num=0,save_path=
-                           './images_dist/', pvalue=0, num_plots = 20, ax_sub=None):
+                           stats_val=0, method='gram', kernel_num=0, pvalue=0, num_plots=20, ax_sub=None):
 
         if method != 'gram':
             # Assuming log normal dist due to relu :
@@ -133,7 +132,9 @@ class CustomRequireGrad:
 
     def __init__(self, net, pretrained_data_set, input_test,
                  dist_processing_method='fft', batches_num=10, percent=70,
-                 deepest_layer=11,similarity = 'ws', save_folder='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained'):
+                 deepest_layer=11,similarity='ws', save_folder='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained',
+                 process_method='fft'):
+        self.process_method=process_method
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
         self.network = net
@@ -256,7 +257,7 @@ class CustomRequireGrad:
                                                   np.prod(np.shape(dist_new_channel_first)
                                                           [1:]))))
                         # Required shape per channel:
-                        transform_prior = self.PriorPreprocess(method='linear', shape_act=np.shape(dist_new), **self.__dict__)
+                        transform_prior = self.PriorPreprocess(method=self.process_method, shape_act=np.shape(dist_new), **self.__dict__)
                         values_post_test, values_post_pre = transform_prior.initialize_list()
 
                         ## seperating distribution per kernel
@@ -296,43 +297,6 @@ class CustomRequireGrad:
                     self.statistic_test[name].append(dist_new_tot_size_per_ch)
                     self.statistic_pretrained[name].append(dist_pre_tot_size_per_ch)
 
-    def _distribution_compare(self, test='kl', plot_dist=False):
-        for layer_test, layer_pretrained in (
-                zip(self.statistic_test.items(),
-                    self.statistic_pretrained.items())):
-            stats_value = []
-            if not np.sum(layer_pretrained[1][0]) is None:  # has grads layers
-                layer_test_concat = self._concat_func(layer_test[1])
-                layer_pretrained_concat = self._concat_func(layer_pretrained[1])
-                for layer_test_run, layer_pretrained_run in zip(
-                        layer_test_concat, layer_pretrained_concat):
-                    if test == 't':
-                        mu_pre, std_pre = self._prepare_mean_std_layer(
-                            layer_pretrained)
-                        mu_test, std_test = self._prepare_mean_std_layer(
-                            layer_test)
-                        test_normal = stats.norm.rvs(
-                            loc=mu_test, scale=std_test, size=200)
-                        pretrained_normal = stats.norm.rvs(
-                            loc=mu_pre, scale=std_pre, size=200)
-                        stats_value = stats.ttest_ind(
-                            pretrained_normal, test_normal, equal_var=False)[1]
-                    if test == 'kl':
-                        norm_test = np.log(layer_test_run)
-                        norm_pre = np.log(layer_pretrained_run)
-                        kl_value = 1 / (1e-9 + smoothed_hist_kl_distance(
-                            norm_test, norm_pre, nbins=10, sigma=1))
-                        stats_value.append(kl_value)
-                self.stats_value_per_layer[layer_test[0]] = stats_value
-
-                if plot_dist:
-                    self._plot_distribution(method='kl',
-                        ind_layer=1,
-                        layer_pretrained=layer_pretrained[1],
-                        layer_test=layer_test[1],save_path='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained/dist/', stats_val=stats_value[-1],ax_sub=ax_sub)
-            else:
-                self.stats_value_per_layer[layer_test[0]] = 0
-
     def _metric_compare(self):
         for ind_layer, name in enumerate(self.modules_name_list):
             if ind_layer > self.max_layer:
@@ -367,7 +331,7 @@ class CustomRequireGrad:
                                                 layer_pretrained=pre_in,
                                                 layer_test=test_in,
                                                 kernel_num=ind_inside_layer,
-                                                method='gram', save_path=self.save_folder + '/dist/', pvalue=sim, num_plots=num_plots,ax_sub=ax_sub)
+                                                method='gram', pvalue=sim, num_plots=num_plots,ax_sub=ax_sub)
                     else:
                         sim = [-1]
                     stats_value.append(sim)
@@ -382,7 +346,7 @@ class CustomRequireGrad:
                         str(ind_layer) + '.jpg', dpi=400)
             plt.close()
 
-    def _require_grad_search(self, percent=25, mult_grad_value=1e-3):
+    def _require_grad_search(self, percent=25, mult_grad_value=1e-1):
         th_value = [np.percentile(val, percent)for key, val in
                                   self.stats_value_per_layer.items()]
         dict_model = dict(self.network.named_modules())
@@ -446,8 +410,5 @@ class CustomRequireGrad:
         self._initialize_parameters()
         self._prepare_input_tensor()
         self._calc_layers_outputs(batches_num=self.num_batches)
-        if self.dist_processing_method == 'fft':
-            self._metric_compare()
-        if self.dist_processing_method == 'distribution':
-            self._distribution_compare()
+        self._metric_compare()
         self._require_grad_search(percent=self.threshold_percent)
