@@ -346,7 +346,7 @@ class CustomRequireGrad:
                         str(ind_layer) + '.jpg', dpi=400)
             plt.close()
 
-    def _require_grad_search(self, percent=25, mult_grad_value=1e-1):
+    def _require_grad_search(self, percent=25, mult_grad_value=1e-4):
         th_value = [np.percentile(val, percent)for key, val in
                                   self.stats_value_per_layer.items()]
         dict_model = dict(self.network.named_modules())

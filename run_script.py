@@ -101,8 +101,9 @@ def main(args):
     net = network
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
-    #cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr, args.lr*10,
-      #                                            step_size_up=100)
+
+    cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr, args.lr*100,
+                                                  step_size_up=10)
 
     writer = SummaryWriter(args.folder_save_stats+str(args.num_run)+'/'+ str(args.with_custom_grad) + '_' + str(amount_data) + '_samples')
     accuracy = []
@@ -128,7 +129,8 @@ def main(args):
                 if epoch < 35:
                     rg.update_grads(net)
             optimizer.step()
-            #cycle_opt.step()
+            if args.cycle_opt:
+                cycle_opt.step()
             running_loss += loss.item()
         print('[%d, %5d] loss: %.3f' %
               (epoch + 1, i + 1, running_loss / i))
@@ -162,19 +164,19 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_run', type=int, default=14)
+    parser.add_argument('--num_run', type=int, default=15)
     parser.add_argument('--seed', type=int, default=10)
 
     #model:
-    parser.add_argument('--pre_model', type=str, default='diff_simple')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model10')
+    parser.add_argument('--pre_model', type=str, default='simple')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model9')
     parser.add_argument('--pre_dataset', type=str, default='KMNIST')
     parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
-    parser.add_argument('--with_custom_grad', type=bool, default=False)
-    parser.add_argument('--percent', type=int, default=50)
-    parser.add_argument('--num_batch_analysis', type=int, default=200)
+    parser.add_argument('--with_custom_grad', type=bool, default=True)
+    parser.add_argument('--percent', type=int, default=75)
+    parser.add_argument('--num_batch_analysis', type=int, default=40)
     parser.add_argument('--folder_save_stats', type=str, default=r'./all_runs/')
     parser.add_argument('--process_method', type=str, default='fft')
     parser.add_argument('--deepest_layer', type=int, default=8)
@@ -186,4 +188,6 @@ if __name__ == '__main__':
     parser.add_argument('--num_batch', type=int, default=2)
     parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--lr', type=float, default=8e-3)
+    parser.add_argument('--cycle_opt', type=bool, default=True)
+
     main(parser.parse_args())
