@@ -43,10 +43,10 @@ if __name__ == "__main__":
     dataloader2 = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
                                               shuffle=False)
 
-    #network = models.vgg19(pretrained=True).cuda()
-    network =Simple_Net().cuda()
-    PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model39'
-    network.load_state_dict(torch.load(PATH), strict=False)
+    network = models.vgg19(pretrained=True).cuda()
+    #network =Simple_Net().cuda()
+    #PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\model39'
+    #network.load_state_dict(torch.load(PATH), strict=False)
 
     #num_ftrs = network.classifier[6].in_features
     #network.classifier[6] = nn.Linear(num_ftrs, 10).cuda()
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     #                                         shuffle=False)
 
     net = network
-    net.load_state_dict(torch.load(PATH), strict=False)
+    #net.load_state_dict(torch.load(PATH), strict=False)
 
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=9e-2, momentum=0.9)
