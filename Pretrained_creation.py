@@ -18,7 +18,6 @@ def replicate_channels(im):
 transformMnist= transforms.Compose([transforms.ToTensor(),transforms.Resize((64, 64)),replicate_channels,
                                 transforms.Normalize((0.1307,), (0.3081,))])
 
-
 class Simple_Net(nn.Module):
     def __init__(self):
         super(Simple_Net, self).__init__()

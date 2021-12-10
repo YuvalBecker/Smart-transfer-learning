@@ -6,7 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchsummary import summary
 import torch.optim as optim
-from trainning_net import  Simple_Net, diff_net, Large_Simple_Net
+from Pretrained_creation import  Simple_Net, diff_net, Large_Simple_Net
 from distribution_net import CustomRequireGrad
 import argparse
 from data_utils import cifar_part, kmnist_part, mnist_part, Fmnist_part
@@ -31,9 +31,9 @@ def main(args):
         dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,shuffle=False)
 
     if args.pre_dataset == 'KMNIST':
-        transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),replicate_channels,
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),
                                         transforms.Normalize((0.1307,), (0.3081,))])
-        dataset_pre = kmnist_part(transform,download=True, train=True, middle_range=5, upper= True)
+        dataset_pre = kmnist_part(transform, train=True, middle_range=5, upper= True)
         dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,
                                                      shuffle=True)
 
@@ -251,23 +251,23 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_run', type=int, default=1231231)
+    parser.add_argument('--num_run', type=int, default=1231231),
     parser.add_argument('--seed', type=int, default=3)
 
     #model:
     parser.add_argument('--pre_model', type=str, default='densenet121')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\densenet121\_CIFAR1040')
-    parser.add_argument('--pre_dataset', type=str, default='CIFAR10')
-    parser.add_argument('--test_dataset', type=str, default='CIFAR10')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\densenet121\models_dense_net_MNIST5')
+    parser.add_argument('--pre_dataset', type=str, default='MNIST')
+    parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
-    parser.add_argument('--with_custom_grad', type=bool, default=True)
+    parser.add_argument('--with_custom_grad', type=bool, default=False)
     parser.add_argument('--freeze_all', type=bool, default=True, help='only for custom_grad is false, if True,'
                                                                        'freeze everything except the classification'
                                                                        'layer')
 
-    parser.add_argument('--percent', type=int, default=75)
-    parser.add_argument('--num_batch_analysis', type=int, default=20)
+    parser.add_argument('--percent', type=int, default=35)
+    parser.add_argument('--num_batch_analysis', type=int, default=40)
     parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\different_data_domain\\')
     parser.add_argument('--process_method', type=str, default='linear')
     parser.add_argument('--deepest_layer', type=int, default=20)
@@ -283,12 +283,12 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1E-4)
     parser.add_argument('--cycle_opt', type=bool, default=False)
     # Script to run over all params
-    num_batch = [ 10,   20, 40]
+    num_batch = [ 10, 20, 40]
     num_seed  = [ 255]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
         #print(id)
-        args.num_run = id + 8000
+        args.num_run = id + 360000
         for n_seed in num_seed:
             args.num_batch = batch_size
             args.seed = n_seed

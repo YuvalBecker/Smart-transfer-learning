@@ -5,7 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from trainning_net import  Simple_Net
+from Pretrained_creation import  Simple_Net
 from distribution_net import CustomRequireGrad
 batch_size = 20
 num_b = 2
