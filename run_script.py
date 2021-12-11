@@ -255,9 +255,9 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=3)
 
     #model:
-    parser.add_argument('--pre_model', type=str, default='simple')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\simple\_MNIST12')
-    parser.add_argument('--pre_dataset', type=str, default='MNIST')
+    parser.add_argument('--pre_model', type=str, default='diff_net')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST13')
+    parser.add_argument('--pre_dataset', type=str, default='KMNIST')
     parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
@@ -283,12 +283,12 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1E-5)
     parser.add_argument('--cycle_opt', type=bool, default=True)
     # Script to run over all params
-    num_batch = [ 20, 40]
+    num_batch = [  40]
     num_seed  = [ 255]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
         #print(id)
-        args.num_run = id + 370000
+        args.num_run = id + 390000
         for n_seed in num_seed:
             args.num_batch = batch_size
             args.seed = n_seed
