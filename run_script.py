@@ -255,13 +255,13 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=3)
 
     #model:
-    parser.add_argument('--pre_model', type=str, default='densenet121')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\densenet121\models_dense_net_MNIST5')
+    parser.add_argument('--pre_model', type=str, default='simple')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\simple\_MNIST12')
     parser.add_argument('--pre_dataset', type=str, default='MNIST')
     parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
-    parser.add_argument('--with_custom_grad', type=bool, default=False)
+    parser.add_argument('--with_custom_grad', type=bool, default=True)
     parser.add_argument('--freeze_all', type=bool, default=True, help='only for custom_grad is false, if True,'
                                                                        'freeze everything except the classification'
                                                                        'layer')
@@ -280,15 +280,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--num_batch', type=int, default=3)
     parser.add_argument('--num_epochs', type=int, default=35)
-    parser.add_argument('--lr', type=float, default=1E-4)
-    parser.add_argument('--cycle_opt', type=bool, default=False)
+    parser.add_argument('--lr', type=float, default=1E-5)
+    parser.add_argument('--cycle_opt', type=bool, default=True)
     # Script to run over all params
-    num_batch = [ 10, 20, 40]
+    num_batch = [ 20, 40]
     num_seed  = [ 255]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
         #print(id)
-        args.num_run = id + 360000
+        args.num_run = id + 370000
         for n_seed in num_seed:
             args.num_batch = batch_size
             args.seed = n_seed

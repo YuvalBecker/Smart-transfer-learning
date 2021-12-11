@@ -104,15 +104,15 @@ if __name__ == '__main__':
 
     #network = Simple_Net().cuda()
     #network = Large_Simple_Net().cuda()
-    #network = Simple_Net().cuda()
+    network = Simple_Net().cuda()
 
 #network = models.vgg19(pretrained=True).cuda()
-    network = models.densenet121(pretrained=True).cuda()
+    #network = models.densenet121(pretrained=True).cuda()
     criterion = nn.CrossEntropyLoss()
     #optimizer = optim.SGD(network.parameters(), lr=5e-3, momentum=0.9)
     optimizer = optim.Adam(network.parameters(), lr=5e-4)
-    #PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\simple\simple_net_new_CIFAR1047'
-    #network.load_state_dict(torch.load(PATH), strict=True)
+    PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\simple\_net_new_MNIST4'
+    network.load_state_dict(torch.load(PATH), strict=True)
 
 #cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, 1e-3, 5e-3,
     #                                  step_size_up=100)
@@ -160,7 +160,7 @@ if __name__ == '__main__':
                 correct += np.array((predicted.detach().cpu() == labels)).sum()
                 if count > 250:
                     break
-        torch.save(network.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\densenet121\_KMNIST'+str(epoch))
+        torch.save(network.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\simple\_KMNIST'+str(epoch))
 
         print(
             'Accuracy of the network on the 10000 test images: %f %%' % (
