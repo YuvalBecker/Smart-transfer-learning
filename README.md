@@ -19,16 +19,19 @@ i-sample index
 i-sample index
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
-![Figure 1, illustration of activation maps aggregation process, we collect for every input sample the activations of all kernels outputs in all layers](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
+![](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
+Figure 1, illustration of activation maps aggregation process, we collect for every input sample the activations of all kernels outputs in all layers
 
 
-Assumming we have small amount of data for trainning we want to use pretrained layers (weights) efficient as possible. Therfore in this approach , There is a differentiation process in order to identify layers which correspond similarly over both datasets, Those layers wont participate in the optimization process Because their operations seem to align with the new dataset. 
-By "similarly" - compare between the 2 distributions of the 2 datasets.
-This approach reduces overfitting by reducing the amount of variables and increase performance.
+Distribution similarity test: 
+We calculate for each layer and kernel it’s distribution, we repeat the process for both pre-trained dataset activations and for the new dataset activations.
+aggregatio_pre (i,layer,kernel)~ 〖p(layer,kernel)〗_correct  
+aggregatio_new (i,layer,kernel)~ 〖p(layer,kernel)〗_unkown  
+Given the calculated two distributions for every kernel we perform a statistic test to measure the similarity between the distributions.
+Statistic Test(〖p(layer,kernel)〗_correct,〖p(layer,kernel)〗_unkown ) 
 
-At the moment each layer activation is under the assumption of log normal distribution (given relu), Therfor I aggragate all layer activations in the network given all dataset
-and compare between the 2 distributions by transforming to "normal" and use  kl divergence.
-Or by comparing between the distributions of gram matrixes , in order to reduce the localization dependancy.
+
+
 
 call the constructor : `rg = CustomRequireGrad(network, dataloader, dataloader2)`
 
@@ -45,7 +48,7 @@ Run inside the training loop :
 In order to change the specific weights grads
   
 
-![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/output_layer_histograms.JPG)
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/stats_kernels.png)
 
 
 In the figure - layers output distributions, compare between 2 datsets. we can see for intuition , that the first layers seems to have global feature extraction , therfor its output
