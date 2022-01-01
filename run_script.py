@@ -4,12 +4,11 @@ import torch
 from torchvision import models
 from torch.utils.tensorboard import SummaryWriter
 
-from torchsummary import summary
 import torch.optim as optim
-from Pretrained_creation import  Simple_Net, diff_net, Large_Simple_Net
-from distribution_net import CustomRequireGrad
+from Pretrained_creation import  Simple_Net, Large_Simple_Net
+from SmartTransferLearning import CustomRequireGrad
 import argparse
-from data_utils import cifar_part, kmnist_part, mnist_part, Fmnist_part
+from datasets.data_utils import cifar_part, kmnist_part, mnist_part, Fmnist_part
 import os
 def replicate_channels(im):
     return torch.stack([im, im, im]).squeeze()
