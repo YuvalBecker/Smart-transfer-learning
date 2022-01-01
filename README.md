@@ -15,11 +15,11 @@ D_pre-pretrained dataset,  D_new-new dataset,  Net_pre-pretrained network
 
 Running over all new dataset and aggregate the outputs: 
 
-aggregatio_new(i,layer,kernel) = Net_pre (D_(new(i)) (k))  , i-sample index
+aggregation_new(i,layer,kernel) = Net_pre (D_(new(i)) (k))  , i-sample index
 
 Running over all pre-trained dataset and aggregate the outputs: 
 
-aggregatio_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k)), i-sample index
+aggregation_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k)), i-sample index
 
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
