@@ -28,12 +28,16 @@ Figure 1, illustration of activation maps aggregation process, we collect for ev
 
 
 Distribution similarity test: 
-We calculate for each layer and kernel it’s distribution, we repeat the process for both pre-trained dataset activations and for the new dataset activations.
-aggregatio_pre (i,layer,kernel)~ 〖p(layer,kernel)〗_correct  
-aggregatio_new (i,layer,kernel)~ 〖p(layer,kernel)〗_unkown  
-Given the calculated two distributions for every kernel we perform a statistic test to measure the similarity between the distributions.
-Statistic Test(〖p(layer,kernel)〗_correct,〖p(layer,kernel)〗_unkown ) 
 
+We calculate for each layer and kernel it’s distribution, we repeat the process for both pre-trained dataset activations and for the new dataset activations.
+
+aggregatio_pre (i,layer,kernel) ~ p_correct(layer,kernel)  
+
+aggregatio_new (i,layer,kernel) ~ p_unknown(layer,kernel) 
+
+Given the calculated two distributions for every kernel we perform a statistic test to measure the similarity between the distributions.
+
+Statistic Test(p_correct(layer,kernel) , p_unknown(layer,kernel))
 
 
 
