@@ -1,8 +1,25 @@
-# Statistics-pretrained
-Method for adjusting pretrained networks for faster convergence and performance.
-Done by estimating  the distribution of all pretrained layers using the trained dataset , and compare it to the distribution over the same pretrained layers using the desire new dataset
+# Smart transfer learning
+The last decade has proved Deep Learning models to be very successful in solving tasks from various fields including Computer Vision, Natural Language Processing, Signal Processing, Biology, and others. Many DL models consists of thousands and even billions of learnable parameters making the learning process very expensive both computationally and in the amount of training samples. In recent years, a lot of effort was put into the generation and training of large, complex “generalize” models based on vast amount of data and a lot of computational resources.
+Therefore, transfer learning has become a common method.
+Despite the immense popularity of transfer learning, there has been little work studying its precise effects.
 
-For example : Given VGG network trained over imagenet,  D - pretrained imagenet dataset , layer1(D)  - output layer1 distribution given imagenet dataset , D2 - new dataset , layer1(D2) - output layer1 distriubtion given new dataset.
+Method that performs smart transfer learning by calculating the statistics of two datasets over a pre-trained network. One is the dataset our pre-trained model was trained on(dataset_pre) and the second is the new dataset we want to train the network(dataset_new). 
+In order to identify which layer/kernel performs generalization for the new task we conduct a similarity test between the two distribution for every layer/kernel. A layer/kernel with similarity higher than a threshold (hyper parameter) is identify as a generalized layer.
+
+
+We will describe our general identification process in steps:
+	Data collection:
+Some definitions first: 
+D_pre-pretrained dataset,D_new-new dataset,Net_pre-pretrained network
+	Running over all new dataset and aggregate the outputs: 
+aggregatio_new (i,layer,kernel)=Net_pre (D_(new(i)) (k))  
+i-sample index
+	Running over all pre-trained dataset and aggregate the outputs: 
+ aggregatio_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k))
+i-sample index
+We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
+
+
 
 Assumming we have small amount of data for trainning we want to use pretrained layers (weights) efficient as possible. Therfore in this approach , There is a differentiation process in order to identify layers which correspond similarly over both datasets, Those layers wont participate in the optimization process Because their operations seem to align with the new dataset. 
 By "similarly" - compare between the 2 distributions of the 2 datasets.
