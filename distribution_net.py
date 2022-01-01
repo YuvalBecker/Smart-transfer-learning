@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 import os
 import torch
 import scipy
-
+import torchvision
 def kl(p, q):
+    # Kl divergence metric
     p = np.abs(np.asarray(p, dtype=np.float) + 1e-15)
     q = np.abs(np.asarray(q, dtype=np.float) + 1e-15)
-    p = p/np.sum(p)
-    q = q/np.sum(q)
+    p = p / np.sum(p)
+    q = q / np.sum(q)
 
     return np.sum(np.where(p != 0, p * np.log(p / q), 0))
 
@@ -20,11 +21,20 @@ def smoothed_hist_kl_distance(a, b, nbins=20):
     return kl(ahist, bhist)
 
 class CustomRequireGrad:
+    '''
+    This class collects statistics for each kernel/layer given a pre-trained model and two datasets.
+    Performs a similarity test over the collected distributions kernel wise.
+    Performs gradient modification of the chosen kernels/layers during backpropagation.
 
-    def __init__(self, net, pretrained_data_set, input_test,
-                 dist_processing_method='fft', batches_num=10, percent=70,
-                 deepest_layer=11,similarity='ws', save_folder='/home/yuvalbe/bpct2/bpcpt/Statistics_pretrained',
-                 process_method='fft'):
+    Required inputs:
+    net -> Network architecture.
+    pretrained_data_set -> Dataloader points to the dataset the pre-trained network was trained.
+    input_test -> Dataloader points to the new task dataset .
+    '''
+    def __init__(self, net: torchvision.models , pretrained_data_set: torch.utils.data.DataLoader, input_test:torch.utils.data.DataLoader,
+                 dist_processing_method: str='fft', batches_num: int=10, percent: int=70,
+                 deepest_layer: int=11,similarity: str='ws', save_folder: str='./',
+                 process_method: str='fft'):
         self.process_method=process_method
         self.pretrained_data_set = pretrained_data_set
         self.input_test = input_test
@@ -377,15 +387,16 @@ class CustomRequireGrad:
             plt.close()
 
     def _metric_compare_full_layer(self):
+        num_plots = len(self.modules_name_list)
+        fig = plt.figure(1, figsize=(20, 20))
+        ax_sub = fig.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))))
+        self.plot_counter = 0
+        ax_sub = ax_sub.ravel()
         for ind_layer, name in enumerate(self.modules_name_list):
             if ind_layer > self.max_layer:
                 break
-            num_plots = 2
-            fig = plt.figure(ind_layer, figsize=(20, 20))
-            ax_sub = fig.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))))
-            ax_sub = ax_sub.ravel()
             stats_value = []
-            self.plot_counter = 0
+            #self.plot_counter += 1
             if np.size(self.statistic_test[name]) > 1:  # check if has values
                 test = np.ravel(self.statistic_test[name])
                 pre  = np.ravel(self.statistic_pretrained[name])
@@ -413,13 +424,10 @@ class CustomRequireGrad:
                     self._plot_distribution(ind_layer=int(ind_layer),
                                             layer_pretrained=pre_in,
                                             layer_test=test_in,
-                                            kernel_num=1,
+                                            kernel_num=ind_layer,
                                             method='gram', pvalue=sim, num_plots=num_plots,ax_sub=ax_sub,layer_name=name)
                     if not os.path.exists(self.save_folder + '//dist/'):
                         os.makedirs(self.save_folder + '//dist/')
-                    plt.savefig(self.save_folder + '//dist/' + '//Layer_name_' +
-                    name + '.jpg', dpi=400)
-                    plt.close()
 
                 else:
                     sim = [-1]
@@ -427,7 +435,11 @@ class CustomRequireGrad:
             else:
                 stats_value = [-1]
             self.stats_value_per_layer[name] = stats_value.copy()
-            self.stats_value_per_layer[name] = stats_value.copy()
+        plt.savefig(self.save_folder + '//dist/' + '//Layer_name_' +
+                    name + '.jpg', dpi=400)
+        plt.close()
+
+        #self.stats_value_per_layer[name] = stats_value.copy()
         ### Finished layer loop over kernels :
 
     def _require_grad_search(self, percent=25, mult_grad_value=1e-3):
@@ -476,9 +488,8 @@ class CustomRequireGrad:
                             'bias'] = change_activations
 
     def _require_grad_search_layer(self, percent=25, mult_grad_value=1e-7):
-        th_value = [np.percentile(val, percent)for key, val in
-                    self.stats_value_per_layer.items()]
-        th_value = 30
+        th_value = np.percentile(list(self.stats_value_per_layer.values()),percent)
+        #th_value = 30
         dict_model = dict(self.network.named_modules())
         for ind , name in enumerate(self.modules_name_list):
             if ind > self.max_layer:

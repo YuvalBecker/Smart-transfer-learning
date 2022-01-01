@@ -13,7 +13,6 @@ from data_utils import cifar_part, kmnist_part, mnist_part, Fmnist_part
 import os
 def replicate_channels(im):
     return torch.stack([im, im, im]).squeeze()
-
 def main(args):
     torch.cuda.manual_seed_all(args.seed)
     batch_size = args.batch_size
@@ -50,7 +49,6 @@ def main(args):
         dataset_pre = Fmnist_part(transform, train=True, middle_range=5, upper= True)
         dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,
                                                      shuffle=True)
-
 
     if args.test_dataset == 'CIFAR10':
         transform = transforms.Compose([transforms.Resize((64, 64)),
@@ -106,7 +104,6 @@ def main(args):
         trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
                                                   shuffle=False)
 
-
     if args.test_dataset == 'KMNIST':
         transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),
                                         transforms.Normalize((0.1307,), (0.3081,))])
@@ -139,6 +136,7 @@ def main(args):
         network.load_state_dict(torch.load(args.pre_model_path), strict=True)
     if args.pre_model == 'densenet121':
         network = models.densenet121(pretrained=True).to(args.device)
+
         #network.load_state_dict(torch.load(args.pre_model_path), strict=True)
 
     if args.with_custom_grad:
@@ -200,8 +198,6 @@ def main(args):
             if args.cycle_opt:
                 cycle_opt.step()
             running_loss += loss.item()
-
-
         if (np.abs(running_loss - running_loss_PREV)) < 1e-4:
             count_time_same_loss+=1
             if count_time_same_loss > 11:
@@ -247,17 +243,15 @@ def main(args):
                           epoch)
 
         accuracy.append((epoch, 100 * correct / total))
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_run', type=int, default=1231231),
     parser.add_argument('--seed', type=int, default=3)
 
     #model:
-    parser.add_argument('--pre_model', type=str, default='diff_net')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST13')
-    parser.add_argument('--pre_dataset', type=str, default='KMNIST')
+    parser.add_argument('--pre_model', type=str, default='densenet121')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\densenet121\models_dense_net_MNIST5')
+    parser.add_argument('--pre_dataset', type=str, default='MNIST')
     parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
     #custom gradient:
@@ -266,13 +260,13 @@ if __name__ == '__main__':
                                                                        'freeze everything except the classification'
                                                                        'layer')
 
-    parser.add_argument('--percent', type=int, default=35)
+    parser.add_argument('--percent', type=int, default=25)
     parser.add_argument('--num_batch_analysis', type=int, default=40)
     parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\different_data_domain\\')
     parser.add_argument('--process_method', type=str, default='linear')
-    parser.add_argument('--deepest_layer', type=int, default=20)
-    parser.add_argument('--run_mode', type=str, default='normal')
-    parser.add_argument('--freezing_mode', type=str, default='normal')
+    parser.add_argument('--deepest_layer', type=int, default=40)
+    parser.add_argument('--run_mode', type=str, default='per_layer')
+    parser.add_argument('--freezing_mode', type=str, default='per_layer')
     parser.add_argument('--similarity_func', type=str, default='KS')
 
     # Training
@@ -283,12 +277,12 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1E-5)
     parser.add_argument('--cycle_opt', type=bool, default=True)
     # Script to run over all params
-    num_batch = [  40]
-    num_seed  = [ 255]
+    num_batch = [  10, 20, 40, 80]
+    num_seed  = [ 120, 19, 255]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
         #print(id)
-        args.num_run = id + 390000
+        args.num_run = id
         for n_seed in num_seed:
             args.num_batch = batch_size
             args.seed = n_seed
