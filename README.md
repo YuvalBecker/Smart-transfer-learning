@@ -5,7 +5,9 @@ Despite the immense popularity of transfer learning, there has been little work 
 
 Method that performs smart transfer learning by calculating the statistics of two datasets over a pre-trained network. One is the dataset our pre-trained model was trained on(dataset_pre) and the second is the new dataset we want to train the network(dataset_new). 
 In order to identify which layer/kernel performs generalization for the new task we conduct a similarity test between the two distribution for every layer/kernel. A layer/kernel with similarity higher than a threshold (hyper parameter) is identify as a generalized layer.
-
+```math
+SE = \frac{\sigma}{\sqrt{n}}
+```
 
 We will describe our general identification process in steps:
 
