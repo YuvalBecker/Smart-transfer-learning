@@ -5,9 +5,6 @@ Despite the immense popularity of transfer learning, there has been little work 
 
 Method that performs smart transfer learning by calculating the statistics of two datasets over a pre-trained network. One is the dataset our pre-trained model was trained on(dataset_pre) and the second is the new dataset we want to train the network(dataset_new). 
 In order to identify which layer/kernel performs generalization for the new task we conduct a similarity test between the two distribution for every layer/kernel. A layer/kernel with similarity higher than a threshold (hyper parameter) is identify as a generalized layer.
-```math
-SE = \frac{\sigma}{\sqrt{n}}
-```
 
 We will describe our general identification process in steps:
 
@@ -15,13 +12,13 @@ Data collection:
 
 Some definitions first: 
 
-$D_pre-pretrained dataset,D_new-new dataset,Net_pre-pretrained network
+D_pre-pretrained dataset,D_new-new dataset,Net_pre-pretrained network
 	Running over all new dataset and aggregate the outputs: 
 aggregatio_new (i,layer,kernel)=Net_pre (D_(new(i)) (k))  
 i-sample index
 	Running over all pre-trained dataset and aggregate the outputs: 
  aggregatio_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k))
-i-sample index$
+i-sample index
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
 ![](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
@@ -56,32 +53,7 @@ In order to change the specific weights grads
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/stats_kernels.png)
 
 
-In the figure - layers output distributions, compare between 2 datsets. we can see for intuition , that the first layers seems to have global feature extraction , therfor its output
-distributions are more similar than the deeper layers. 
-
-** clarification: Distribution measurement is performed for every kernel in each layer - meanning , some kernel weights will 
-be modified while other may not in the same layer!
-
-Example of chosen weight kernelS in a specific layer:
-
-![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_new.jpg)
-
-In the figure FMNIST dataset over VGG imagenet pretrained
-
-![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/data/save_activations/features.9_pre.jpg)
-
-In the figure The same layer with imagenet data as input
-
-
-The activation maps are the ones the algorithm chose as meanningful between the 2 datasets. 
-
 ### First results:
-Trained 200 samples from CIFAR10 using vgg (pretrained from imagenet) 
-1. Trained without modifying layers gradients - 54% accuracy over test data (10000 samples) 
-2. Trained with modifying specific layers chosen by t -test - 68 % accuracy over test data (10000 samples)
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/densenet_results.png)
 
-** The trainning process was done without shuffle for comparison purposes. 
-
-** stopping criteria : over fitting.
- 
  
