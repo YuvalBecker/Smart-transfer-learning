@@ -56,4 +56,7 @@ In order to change the specific weights grads
 ### First results:
 ![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/densenet_results.png)
 
+Results over Densenet121 architecture, every color represents a specific datasets pair, dotted line represents the results using our algorithm. 
+ 
+
  
