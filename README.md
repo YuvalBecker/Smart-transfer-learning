@@ -8,15 +8,18 @@ In order to identify which layer/kernel performs generalization for the new task
 
 
 We will describe our general identification process in steps:
-	Data collection:
+
+Data collection:
+
 Some definitions first: 
-D_pre-pretrained dataset,D_new-new dataset,Net_pre-pretrained network
+
+$D_pre-pretrained dataset,D_new-new dataset,Net_pre-pretrained network
 	Running over all new dataset and aggregate the outputs: 
 aggregatio_new (i,layer,kernel)=Net_pre (D_(new(i)) (k))  
 i-sample index
 	Running over all pre-trained dataset and aggregate the outputs: 
  aggregatio_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k))
-i-sample index
+i-sample index$
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
 ![](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
