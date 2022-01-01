@@ -23,7 +23,7 @@ aggregation_pre (i,layer,kernel)=Net_pre (D_(pre(i)) (k)), i-sample index
 
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
-![](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
+![](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/artifacts/statistics.png)
 Figure 1, illustration of activation maps aggregation process, we collect for every input sample the activations of all kernels outputs in all layers
 
 
@@ -56,11 +56,11 @@ Run inside the training loop :
 In order to change the specific weights grads
   
 
-![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/stats_kernels.png)
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/artifacts/stats_kernels.png)
 Figure 2, Example of the produced 2 distributions for each kernel in specific layer. We used a DENSENET121 pretrained on FMNIST and compare to KMNIST dataset. Every plot represents the two distribution over specific kernel. 
 
 ### First results:
-![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/densenet_results.png)
+![alt text](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/artifacts/densenet_results.png)
 
 Figure3, Results over Densenet121 architecture, every color represents a specific datasets pair, dotted line represents the results using our algorithm. 
  
