@@ -19,7 +19,7 @@ i-sample index
 i-sample index
 We forward pass all pre-trained dataset and collect network’s activations for every kernel in every layer. We repeat the process for the new dataset.
 
-![asdasd](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
+![Figure 1, illustration of activation maps aggregation process, we collect for every input sample the activations of all kernels outputs in all layers](https://github.com/YuvalBecker/Statistics-pretrained/blob/main/statistics.png)
 
 
 Assumming we have small amount of data for trainning we want to use pretrained layers (weights) efficient as possible. Therfore in this approach , There is a differentiation process in order to identify layers which correspond similarly over both datasets, Those layers wont participate in the optimization process Because their operations seem to align with the new dataset. 
