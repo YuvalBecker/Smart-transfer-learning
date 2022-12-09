@@ -6,6 +6,7 @@ import os
 import torch
 import scipy
 import torchvision
+
 def kl(p, q):
     # Kl divergence metric
     p = np.abs(np.asarray(p, dtype=np.float) + 1e-15)
@@ -20,7 +21,7 @@ def smoothed_hist_kl_distance(a, b, nbins=20):
                     np.histogram(b, bins=nbins)[0])
     return kl(ahist, bhist)
 
-class CustomRequireGrad:
+class CustomStatisticGrad:
     '''
     This class collects statistics for each kernel/layer given a pre-trained model and two datasets.
     Performs a similarity test over the collected distributions kernel wise.
@@ -48,7 +49,7 @@ class CustomRequireGrad:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.similarity = similarity
         self.save_folder = save_folder
-
+        self.ablation_mode = True
     @staticmethod
     def _prepare_mean_std_layer(layer):
         normal_dist_pre = np.log(layer)
@@ -446,6 +447,7 @@ class CustomRequireGrad:
         th_value = [np.percentile(val, percent)for key, val in
                     self.stats_value_per_layer.items()]
         dict_model = dict(self.network.named_modules())
+        weights_zeroing_name = defaultdict(list)
         for ind , name in enumerate(self.modules_name_list):
             if ind > self.max_layer:
                 break
@@ -458,6 +460,10 @@ class CustomRequireGrad:
                 if th_value[ind] > 0:
                     change_inds = np.where((np.array(self.stats_value_per_layer[
                                                          name]) > th_value[ind]) *
+                                           (np.array(self.stats_value_per_layer[
+                                                         name]) < np.inf))[0]
+                    change_weights = np.where((np.array(self.stats_value_per_layer[
+                                                         name]) < th_value[ind]) *
                                            (np.array(self.stats_value_per_layer[
                                                          name]) < np.inf))[0]
                 else:
@@ -482,10 +488,21 @@ class CustomRequireGrad:
                             (len(change_activations), 1, 1, 1))
                         self.layers_grad_mult[name]['weights'] = np.tile(
                             change_activations, (1, new_shape[1], new_shape[2], new_shape[3]))
+                        # Replace the chosen layer with random initialization -> for the ablation study:
+                        if self.ablation_mode:
+                            temp_weight = weight.clone()
+                            initi_values = torch.nn.init.kaiming_normal(temp_weight.clone())
+                            temp_weight[change_weights] =  initi_values.clone()[change_weights]
+                            self.network.state_dict()[name+'.weight'].copy_(temp_weight)
+                            weights_zeroing_name[name+'.weight'] = change_weights
+
                     else:
                         self.layers_grad_mult[name]['bias'] = {}
                         self.layers_grad_mult[name][
                             'bias'] = change_activations
+        import pickle
+        with open('weight_zeroing_idx.pickle', 'wb') as handle:
+            pickle.dump(weights_zeroing_name, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def _require_grad_search_layer(self, percent=25, mult_grad_value=1e-7):
         th_value = np.percentile(list(self.stats_value_per_layer.values()),percent)

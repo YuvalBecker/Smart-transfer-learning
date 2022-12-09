@@ -21,7 +21,7 @@ class kmnist_part(KMNIST):
     def __init__(self, transform, train=True,middle_range=5 ,upper= True):
         super(kmnist_part, self).__init__(root='.', train=train,download=True)
         self.transform = transform
-        if upper:
+        if upper: # Take upper classes 5 to 10
             indexes_dataset = np.where(np.array(self.targets) >= middle_range)[0]
             self.targets = [self.targets[ind].numpy()- middle_range for ind in indexes_dataset]
         else:

@@ -6,7 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import torch.optim as optim
 from Pretrained_creation import  Simple_Net, Large_Simple_Net
-from CustomStatisticGrad.CustomStatisticGrad import CustomStatisticGrad
+from CustomStatisticGrad import CustomStatisticGrad
 import argparse
 from datasets.data_utils import cifar_part, kmnist_part, mnist_part, Fmnist_part
 import os
@@ -109,11 +109,11 @@ def main(args):
         #dataset_new = datasets.MNIST(root='.', train=True, download=True,
         #                             transform=transform)
         #
-        dataset_new = kmnist_part(transform, train=True, middle_range=5, upper=False)
+        dataset_new = kmnist_part(transform, train=True, middle_range=5, upper=True)
         dataloader_new = torch.utils.data.DataLoader(dataset_new, batch_size=batch_size,
                                                      shuffle=False)
         ## for training later
-        testset = kmnist_part(transform, train=False, middle_range=5, upper=False)
+        testset = kmnist_part(transform, train=False, middle_range=5, upper=True)
         testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                                  shuffle=False, num_workers=0)
         dataset_train = dataset_new
@@ -123,16 +123,18 @@ def main(args):
     if args.pre_model == 'simple':
         network = Simple_Net().to(args.device)
         network.load_state_dict(torch.load(args.pre_model_path), strict=True)
+
     if args.pre_model == 'vgg':
         network = models.vgg19(pretrained=True).to(args.device)
-        #network.load_state_dict(torch.load(args.pre_model_path), strict=True)
+        network.load_state_dict(torch.load(args.pre_model_path), strict=True)
         # To adapt the 5 outputs
         network.classifier[6] = torch.nn.Linear(in_features=4096, out_features=5).cuda()
     #path = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\models33'
-        #network.load_state_dict(torch.load(path),strict=True)
+    #network.load_state_dict(torch.load(path),strict=True)
     if args.pre_model == 'diff_net':
         network =   Large_Simple_Net().to(args.device)
         network.load_state_dict(torch.load(args.pre_model_path), strict=True)
+
     if args.pre_model == 'densenet121':
         network = models.densenet121(pretrained=True).to(args.device)
 
@@ -146,11 +148,8 @@ def main(args):
                                  save_folder=args.folder_save_stats + str(args.num_run),
                                  process_method=args.process_method, similarity=args.similarity_func)
         rg.run(mode=args.run_mode)
-        #network.load_state_dict(torch.load(args.pre_model_path), strict=True)
-
         net = network
-
-############# running training session :
+    ############# running training session :
     else: # Freezing everything except the last layer
         freeze_all_str = '_freeze_all_layers_' + str(args.freeze_all)
         net = network
@@ -161,7 +160,7 @@ def main(args):
 
 
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
+    #optimizer = optim.Adam(net.parameters(), lr=args.lr)
     optimizer = optim.RMSprop(net.parameters(), lr=args.lr)
 
     cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr/10, args.lr * 20,
@@ -181,6 +180,7 @@ def main(args):
     running_loss_PREV = -1
     count_time_same_loss = 0
     count_larger_th_loss=0
+    accuracy = [0]
     for epoch in range(args.num_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, args.seed):
@@ -202,11 +202,11 @@ def main(args):
             running_loss += loss.item()
         if (np.abs(running_loss - running_loss_PREV)) < 1e-4:
             count_time_same_loss+=1
-            if count_time_same_loss > 25:
+            if count_time_same_loss > 11:
                 break
-            #optimizer.param_groups[0]['lr'] *= 2
-            #optimizer.param_groups[0]['lr'] = np.min([optimizer.param_groups[0]['lr'], 0.007])
-            #('lr is:' + str(optimizer.param_groups[0]['lr'] ))
+            optimizer.param_groups[0]['lr'] *= 2
+            optimizer.param_groups[0]['lr'] = np.min([optimizer.param_groups[0]['lr'], 0.007])
+            print('lr is:' + str(optimizer.param_groups[0]['lr'] ))
         else:
             count_larger_th_loss += 1
             if count_larger_th_loss > 8:
@@ -243,44 +243,47 @@ def main(args):
         writer.add_scalar('LR',
                           (optimizer.param_groups[0]['lr']),
                           epoch)
+        accurate =  100 * correct / total
+        if accurate > np.max(accuracy):
+            torch.save(net.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\accuracy_'+str(accurate) +'_C_samples_'+str(args.batch_size)+'_base_KMNIST_ablation'+str(epoch))
+        accuracy.append(accurate)
 
-        accuracy.append((epoch, 100 * correct / total))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_run', type=int, default=2),
+    parser.add_argument('--num_run', type=int, default=25005002),
     parser.add_argument('--seed', type=int, default=3)
 
     #model:
     parser.add_argument('--pre_model', type=str, default='diff_net')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST37')
+    parser.add_argument('--pre_model_path', type=str, default=r"C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST36")
     parser.add_argument('--pre_dataset', type=str, default='KMNIST')
-    parser.add_argument('--test_dataset', type=str, default='FMNIST')
+    parser.add_argument('--test_dataset', type=str, default='KMNIST')
 
     #custom gradient:
     parser.add_argument('--with_custom_grad', type=bool, default=True)
-    parser.add_argument('--freeze_all', type=bool, default=False, help='only for custom_grad is false, if True,'
-                                                                       'freeze everything except the classification'
-                                                                       'layer')
+    parser.add_argument('--freeze_all', type=bool, default=False , help='only for custom_grad is false, if True,'
+                                                                      'freeze everything except the classification'
+                                                                      'layer')
 
-    parser.add_argument('--percent', type=int, default=55)
-    parser.add_argument('--num_batch_analysis', type=int, default=30)
-    parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\Runs\\exp_11\\')
+    parser.add_argument('--percent', type=int, default=15)
+    parser.add_argument('--num_batch_analysis', type=int, default=40)
+    parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\different_data_domain\\')
     parser.add_argument('--process_method', type=str, default='linear')
     parser.add_argument('--deepest_layer', type=int, default=40)
     parser.add_argument('--run_mode', type=str, default='normal')
     parser.add_argument('--freezing_mode', type=str, default='normal')
-    parser.add_argument('--similarity_func', type=str, default='ws')
+    parser.add_argument('--similarity_func', type=str, default='KS')
 
     # Training
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--batch_size', type=int, default=40)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_batch', type=int, default=3)
-    parser.add_argument('--num_epochs', type=int, default=55)
-    parser.add_argument('--lr', type=float, default=1E-4)
+    parser.add_argument('--num_epochs', type=int, default=44)
+    parser.add_argument('--lr', type=float, default=1E-5)
     parser.add_argument('--cycle_opt', type=bool, default=False)
     # Script to run over all params
-    num_batch = [   8,16,32]
-    num_seed  = [ 171]
+    num_batch = [ 20]
+    num_seed  = [ 120, 19, 255]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
         #print(id)

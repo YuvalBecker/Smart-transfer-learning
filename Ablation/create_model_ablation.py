@@ -16,7 +16,7 @@ def replicate_channels(im):
     return torch.stack([im, im, im]).squeeze()
 
 transformMnist= transforms.Compose([transforms.ToTensor(),transforms.Resize((64, 64)),replicate_channels,
-                                transforms.Normalize((0.1307,), (0.3081,))])
+                                    transforms.Normalize((0.1307,), (0.3081,))])
 
 class Simple_Net(nn.Module):
     def __init__(self):
@@ -81,24 +81,24 @@ class diff_net(Simple_Net):
 if __name__ == '__main__':
     batch_size  = 16
     #dataset_first = datasets.CIFAR10(root='.', train=True, download=True,
-     #                                transform=transform)
+    #                                transform=transform)
     #dataset_first = datasets.CIFAR10(root='.', train=True, download=True,
     #                                 transform=transformMnist)
-#
+    #
     #trainloader = torch.utils.data.DataLoader(dataset_first, batch_size=batch_size,
     #                                          shuffle=True)
     #dataset_test = datasets.CIFAR10(root='.', train=False, download=True,
-     #                                transform=transform)
+    #                                transform=transform)
 
     #testloader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size,
-     #                                     shuffle=False)
+    #                                     shuffle=False)
 
     dataset_first = datasets.KMNIST(root='.', train=True, download=True,transform=transformMnist)
     trainloader = torch.utils.data.DataLoader(dataset_first, batch_size=batch_size, shuffle=True)
 
     dataset_test = datasets.KMNIST(root='.', train=False, download=True,transform=transformMnist)
     testloader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size,
-                                              shuffle=False)
+                                             shuffle=False)
 
 
     #network = Simple_Net().cuda()
@@ -110,10 +110,10 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     #optimizer = optim.SGD(network.parameters(), lr=5e-3, momentum=0.9)
     optimizer = optim.Adam(network.parameters(), lr=1E-4)
-    PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST37'
+    PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST19'
     network.load_state_dict(torch.load(PATH), strict=True)
 
-#cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, 1e-3, 5e-3,
+    #cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, 1e-3, 5e-3,
     #                                  step_size_up=100)
 
     accuracy = []
@@ -124,17 +124,17 @@ if __name__ == '__main__':
             # get the inputs; data is a list of [inputs, labels]
             optimizer.zero_grad()
             inputs, labels = data
-            ind_to_train = np.where(labels >= 5 )
+            ind_to_train = np.where(labels < 5 )
             if len(ind_to_train[0]) == 0:
                 continue
-            labels = labels[ind_to_train[0]] - 5
+            labels = labels[ind_to_train[0]]
             inputs = inputs[ind_to_train[0]]
             #plt.imshow(inputs.detach().cpu().numpy()[0].transpose())
             outputs = network(inputs.cuda())
             loss = criterion(outputs, labels.cuda())
             loss.backward()
-                #if epoch > 25:
-                  #  optimizer.param_groups[0]['lr'] = 1e-5
+            #if epoch > 25:
+            #  optimizer.param_groups[0]['lr'] = 1e-5
             optimizer.step()
             #cycle_opt.step()
             running_loss += loss.item()
@@ -147,10 +147,10 @@ if __name__ == '__main__':
             for data in testloader:
                 count += 1
                 images, labels = data
-                ind_to_train = np.where(labels >= 5)
+                ind_to_train = np.where(labels < 5)
                 if len(ind_to_train[0]) == 0:
                     continue
-                labels = labels[ind_to_train[0]] - 5
+                labels = labels[ind_to_train[0]]
                 images = images[ind_to_train[0]]
 
                 outputs = network(images.cuda())
@@ -159,10 +159,7 @@ if __name__ == '__main__':
                 correct += np.array((predicted.detach().cpu() == labels)).sum()
                 if count > 250:
                     break
-        torch.save(network.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST'+str(epoch))
-
-        print(
-            'Accuracy of the network on the 10000 test images: %f %%' % (
-                    100 * correct / total))
+        torch.save(network.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST_ablation'+str(epoch))
+        print('Accuracy of the network on the 10000 test images: %f %%' % (100 * correct / total))
         accuracy.append((epoch,100 * correct / total ))
         running_loss = 0.0
