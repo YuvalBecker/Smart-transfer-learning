@@ -2,11 +2,19 @@ import numpy as np
 from collections import defaultdict
 from scipy import stats
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('TkAgg')
 import os
 import torch
 import scipy
 import torchvision
+from CustomStatisticGrad.Encdoer_decoder import DeepAutoencoder
 from  CustomStatisticGrad.PreProcess import PriorPreprocess
+import torch
+import torch.nn.functional as F
+
+from scipy.stats import entropy
+
 def kl(p, q):
     # Kl divergence metric
     p = np.abs(np.asarray(p, dtype=np.float) + 1e-15)
@@ -52,53 +60,55 @@ class CustomStatisticGrad:
         self.ablation_mode = True
         self.PriorPreprocess =PriorPreprocess
         self.modules_name_list = []
-
+        self.auto_enc = DeepAutoencoder().cuda()
+        self.auto_enc.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder99'), strict=True)
+        self.enc = self.auto_enc.encoder
     def _plot_distribution(self, ind_layer, layer_pretrained, layer_test,
-                           stats_val=0, method='gram', kernel_num=0, pvalue=0, num_plots=20, ax_sub=None, layer_name=''):
+                               stats_val=0, method='gram', kernel_num=0, pvalue=0, num_plots=20, ax_sub=None, layer_name=''):
 
-        if method != 'gram':
-            # Assuming log normal dist due to relu :
-            plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
-                        ind_layer % num_plots + 1)
-            values_pre, axis_val_pre = np.histogram(np.log(layer_pretrained),100)
-            plt.plot(axis_val_pre[10:], values_pre[9:] / np.max(values_pre[10:]),
-                     linewidth=4, alpha=0.7, label='D')
-            values, axis_val = np.histogram(np.log(layer_test), 100)
-            plt.plot(axis_val[10:], values[9:] / np.max(values[10:]), linewidth=4,
-                     alpha=0.7, label='D2')
-            #plt.legend()
-            plt.xlim([-5, 3])
-            plt.ylim([0, 1 + 0.1])
-            plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
-                stats_val, 2)),fontsize=7)
-        else:
+            if method != 'gram':
+                # Assuming log normal dist due to relu :
+                plt.subplot(np.sqrt(num_plots), np.sqrt(num_plots),
+                            ind_layer % num_plots + 1)
+                values_pre, axis_val_pre = np.histogram(np.log(layer_pretrained),100)
+                plt.plot(axis_val_pre[10:], values_pre[9:] / np.max(values_pre[10:]),
+                         linewidth=4, alpha=0.7, label='D')
+                values, axis_val = np.histogram(np.log(layer_test), 100)
+                plt.plot(axis_val[10:], values[9:] / np.max(values[10:]), linewidth=4,
+                         alpha=0.7, label='D2')
+                #plt.legend()
+                plt.xlim([-5, 3])
+                plt.ylim([0, 1 + 0.1])
+                plt.title('Layer : ' + str(ind_layer) + 'p: ' + str(np.round(
+                    stats_val, 2)),fontsize=7)
+            else:
 
-            values, axis_val = np.histogram(layer_test, 100)
-            ax_sub[self.plot_counter ].plot(axis_val[10:], values[9:] / np.max(values[10:]),
-                                            linewidth=4,
-                                            alpha=0.7, label='Dtest')
-            minx_1 = np.min(axis_val[10:])
-            maxx_1 = np.max(axis_val[10:])
+                values, axis_val = np.histogram(layer_test, 100)
+                ax_sub[self.plot_counter ].plot(axis_val[10:], values[9:] / np.max(values[10:]),
+                                                linewidth=4,
+                                                alpha=0.7, label='Dtest')
+                minx_1 = np.min(axis_val[10:])
+                maxx_1 = np.max(axis_val[10:])
 
-            values, axis_val = np.histogram(layer_pretrained, 100)
-            ax_sub[self.plot_counter].plot(axis_val[10:],
-                                           values[9:] / np.max(values[10:]),
-                                           linewidth=4,
-                                           alpha=0.7, label='Dpre')
-            minx_2 = np.min(axis_val[10:])
-            maxx_2 = np.max(axis_val[10:])
+                values, axis_val = np.histogram(layer_pretrained, 100)
+                ax_sub[self.plot_counter].plot(axis_val[10:],
+                                               values[9:] / np.max(values[10:]),
+                                               linewidth=4,
+                                               alpha=0.7, label='Dpre')
+                minx_2 = np.min(axis_val[10:])
+                maxx_2 = np.max(axis_val[10:])
 
-            min_x = int(np.min([minx_2, minx_1])) - 0.5
-            max_x = int(np.max([maxx_1, maxx_2])) + 0.5
+                min_x = int(np.min([minx_2, minx_1])) - 0.5
+                max_x = int(np.max([maxx_1, maxx_2])) + 0.5
 
-            ax_sub[self.plot_counter].legend()
-            plt.xlim([min_x, max_x])
-            plt.ylim([0, 1 + 0.1])
-            plt.title(' Kernel num : ' + str(
-                kernel_num) +' p:'+str(pvalue))
-            plt.suptitle('Layer number:' + layer_name)
+                ax_sub[self.plot_counter].legend()
+                plt.xlim([min_x, max_x])
+                plt.ylim([0, 1 + 0.1])
+                plt.title(' Kernel num : ' + str(
+                    kernel_num) +' p:'+str(pvalue))
+                plt.suptitle('Layer number:' + layer_name)
 
-            self.plot_counter +=1
+                self.plot_counter +=1
 
     def plot_activation(self, name_layer, indexes, im_batch=1,
                         save_path=None):
@@ -146,8 +156,8 @@ class CustomStatisticGrad:
                 if len(list(module.parameters())) > 0:  # weights
                     if len(self.layers_grad_mult[name]) > 0:
                         if mode == 'freeze_except_bias':
-                            module.weight.grad *= np.min([1e-2, (2**epoch) * torch.tensor(np.min(self.layers_grad_mult[name]['weights'])
-                                                                    ).to(self.device)])
+                            module.weight.grad *= torch.tensor(np.min([1e-3, (2**epoch) * (np.min(self.layers_grad_mult[name]['weights']))
+                                                                    ])).to(self.device)
                         else:
                             module.weight.grad *= torch.FloatTensor(
                                 self.layers_grad_mult[name]['weights']).to(self.device)
@@ -280,7 +290,10 @@ class CustomStatisticGrad:
     def _calc_layers_outputs(self, batches_num=10, mode='normal'):
         output_pre = []
         output_test = []
-        #### Runs over the first layer.
+        out_feature_store_pre = []
+        out_feature_store_test =[]
+
+    #### Runs over the first layer.
         for ind_batch, (input_model, input_test) \
                 in enumerate(zip(self.pretrained_iter,
                                  self.input_test_iter)):
@@ -290,10 +303,30 @@ class CustomStatisticGrad:
             bp_test = input_test[0].to(self.device, dtype=torch.float)
             module_f = list(self.network.children())[0]
             name_module = list(self.network.named_modules())[1][0]
+            feature_l = module_f.forward(bp)
+            feature_l_test = module_f.forward(bp_test)
+
+            self.pre_feature = True
+            if self.pre_feature:
+                for feature_b_pre, feature_b_test in zip(feature_l, feature_l_test):
+                    resized_tensor_pre = F.interpolate(feature_b_pre.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+                    resized_tensor_test = F.interpolate(feature_b_test.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+
+                    out_encs_pre = self.enc(resized_tensor_pre.view(-1, 64*64))
+                    out_encs_test = self.enc(resized_tensor_test.view(-1, 64*64))
+
+                    if len(out_feature_store_pre) > 0:
+                        out_feature_store_pre = torch.cat([out_feature_store_pre ,out_encs_pre.unsqueeze(0)] ,dim=0)
+                        out_feature_store_test = torch.cat([out_feature_store_test , out_encs_test.unsqueeze(0)] ,dim=0)
+                    else:
+                        out_feature_store_pre = out_encs_pre.unsqueeze(0)
+                        out_feature_store_test = out_encs_test.unsqueeze(0)
+                out_feature_store_pre_nump = np.transpose(out_feature_store_pre.cpu().detach().numpy(), [1,0,2])
+                out_feature_store_test_nump = np.transpose(out_feature_store_test.cpu().detach().numpy(), [1,0,2])
 
             if len(output_pre) > 0:
-                output_pre = torch.cat([output_pre , module_f.forward(bp)] ,dim=0)
-                output_test = torch.cat([output_test , module_f.forward(bp_test)] ,dim=0)
+                output_pre = torch.cat([output_pre ,feature_l] ,dim=0)
+                output_test = torch.cat([output_test , feature_l_test] ,dim=0)
             else:
                 output_pre = module_f.forward(bp)
                 output_test = module_f.forward(bp_test)
@@ -307,7 +340,8 @@ class CustomStatisticGrad:
                 'weight' in module_f._parameters and 'Conv'  in module_f._get_name() :  # Skip module modules
             self.modules_name_list.append(name_module)
 
-        for out_test_ch,output_pre_ch  in zip(output_test_nump,output_pre_nump):
+
+        for out_test_ch,output_pre_ch, out_enc_pre_ch, out_enc_test_ch  in zip(output_test_nump,output_pre_nump,out_feature_store_pre_nump,out_feature_store_test_nump):
             """
             Compansate forwarding distribution from non similar kernels to later similar kernels.
             There is a possiblitly that a generalized kernel in the later layers wont be identified as a generalized due to out of distribution input from previous layers.
@@ -318,19 +352,16 @@ class CustomStatisticGrad:
             Than we forward our input layer by layer, before we forward pass to the next layer, we modify it's mean and std values of the kernels that identified as non-generalized kernels.
             """
             # Calculate the similarity:
-            transform_prior = self.PriorPreprocess(method=self.process_method, shape_act=np.shape(out_test_ch), **self.__dict__)
-            values_post_test, values_post_pre = transform_prior.initialize_list()
-            out_test_ch_transform = transform_prior.run_prior_transformation(
-                out_test_ch)
-            output_pre_ch_transform = transform_prior.run_prior_transformation(
-                output_pre_ch)
-            sim_ch.append(kl(np.ravel(out_test_ch_transform), np.ravel(output_pre_ch_transform)) )
-            # Calculate the required mean and std:
+
+            #sim_ch.append(kl(np.ravel(out_test_ch_transform), np.ravel(output_pre_ch_transform)) )
+            kl_out =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_test_ch)
+            sim_ch.append(1 / kl_out )
+
+        # Calculate the required mean and std:
             self.kernel_mean[name_module].append(np.mean(-1*np.ravel(out_test_ch)) + np.mean(np.ravel(output_pre_ch)))
             self.kernel_std[name_module].append( np.std(np.ravel(output_pre_ch)) / np.std(np.ravel(out_test_ch)))
-
         # Here we chose a hard threshold. - Should be parametrized by the user.
-        bad_sim = sim_ch  > np.mean(sim_ch) * 0.9
+        bad_sim = sim_ch  < np.mean(sim_ch) * 1.1
         L = len(list(self.network.children()))
         name_module = list(self.network.named_modules())[1][0]
 
@@ -338,6 +369,9 @@ class CustomStatisticGrad:
         for index_module, module_f in enumerate(list(self.network.children())[1: L - 1 ]):
             output_pre_new = []
             output_test_new = []
+            out_feature_store_pre = []
+            out_feature_store_test =[]
+
             inds_replace = np.where(bad_sim)[0]
             for indr in inds_replace:
                 indr = int(indr)
@@ -345,6 +379,26 @@ class CustomStatisticGrad:
 
             for ind in range(len(output_pre) - 1):
                 #print(ind)## Continue later.
+                feature_l = module_f.forward(output_pre[ind].unsqueeze(0))
+                feature_l_test = module_f.forward(output_test[ind].unsqueeze(0))
+
+                self.pre_feature = True
+                if self.pre_feature:
+                    for feature_b_pre, feature_b_test in zip(feature_l, feature_l_test):
+                        resized_tensor_pre = F.interpolate(feature_b_pre.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+                        resized_tensor_test = F.interpolate(feature_b_test.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+
+                        out_encs_pre = self.enc(resized_tensor_pre.view(-1, 64*64))
+                        out_encs_test = self.enc(resized_tensor_test.view(-1, 64*64))
+
+                        if len(out_feature_store_pre) > 0:
+                            out_feature_store_pre = torch.cat([out_feature_store_pre ,out_encs_pre.unsqueeze(0)] ,dim=0)
+                            out_feature_store_test = torch.cat([out_feature_store_test , out_encs_test.unsqueeze(0)] ,dim=0)
+                        else:
+                            out_feature_store_pre = out_encs_pre.unsqueeze(0)
+                            out_feature_store_test = out_encs_test.unsqueeze(0)
+                    out_feature_store_pre_nump = np.transpose(out_feature_store_pre.cpu().detach().numpy(), [1,0,2])
+                    out_feature_store_test_nump = np.transpose(out_feature_store_test.cpu().detach().numpy(), [1,0,2])
 
                 if len(output_pre_new) > 0:
                         output_pre_new = torch.cat([output_pre_new , module_f.forward(output_pre[ind].unsqueeze(0))] ,dim=0)
@@ -359,14 +413,10 @@ class CustomStatisticGrad:
             sim_ch =[]
             name_module = list(self.network.named_modules())[index_module + 2][0]
 
-            for out_test_ch,output_pre_ch  in zip(output_test_nump,output_pre_nump):
-                #sim_ch.append(stats.ks_2samp(np.ravel(out_test_ch), np.ravel(output_pre_ch))[1] )
-                values_post_test, values_post_pre = transform_prior.initialize_list()
-                out_test_ch_transform = transform_prior.run_prior_transformation(
-                    out_test_ch)
-                output_pre_ch_transform = transform_prior.run_prior_transformation(
-                    output_pre_ch)
-                sim_ch.append(kl(np.ravel(out_test_ch_transform), np.ravel(output_pre_ch_transform)) )
+            for out_test_ch,output_pre_ch, out_enc_pre_ch, out_enc_test_ch  in zip(output_test_nump,output_pre_nump,out_feature_store_pre_nump,out_feature_store_test_nump):
+                kl_out =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_test_ch)
+                sim_ch.append(1 / kl_out )
+
                 self.kernel_mean[name_module].append(np.mean(-1*np.ravel(out_test_ch)) + np.mean(np.ravel(output_pre_ch)))
                 self.kernel_std[name_module].append( np.std(np.ravel(output_pre_ch)) / np.std(np.ravel(out_test_ch)))
             self.modules_name_list.append(name_module)
@@ -380,7 +430,7 @@ class CustomStatisticGrad:
             #    self.modules_name_list.append(name_module)
 
 
-            bad_sim = sim_ch  > np.mean(sim_ch) * 0.9
+            bad_sim = sim_ch  < np.mean(sim_ch) * 1.1
             output_pre = output_pre_new.clone()
             output_test = output_test_new.clone()
 
@@ -616,6 +666,20 @@ class CustomStatisticGrad:
         self.mean_var_pretrained_data = []
         self.stats_value = []
 
+    @ staticmethod
+    def calculate_kl_divergence(vector1, vector2):
+        # Calculate the multi-dimensional distribution of the first vector
+        kl_divergence = 0
+        for i in range(2):
+            hist1, bins1 = np.histogramdd(vector1[:,i*5 : i*5 +5], bins=[8]*5)
+
+            # Calculate the multi-dimensional distribution of the second vector
+            hist2, bins2 = np.histogramdd(vector2[:,i*5 : i*5 +5], bins=bins1)
+            kl_divergence += entropy(np.ravel(hist1/np.sum(hist1) + 1e-4) , np.ravel(hist2/np.sum(hist2) + 1e-4)  ) / 3
+
+    # Calculate the KL divergence between the two distributions
+        return kl_divergence
+
     def run(self, mode='per_layer'):
         self._initialize_parameters()
         self._prepare_input_tensor()
@@ -626,4 +690,5 @@ class CustomStatisticGrad:
         else:
             #self._metric_compare()
             self._require_grad_search(percent=self.threshold_percent)
+
 

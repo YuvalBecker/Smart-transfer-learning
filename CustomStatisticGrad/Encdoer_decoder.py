@@ -44,9 +44,10 @@ class DeepAutoencoder(torch.nn.Module):
 
 if __name__ == '__main__':
     model = DeepAutoencoder().cuda()
+    model.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder99'), strict=True)
     criterion = torch.nn.MSELoss()
     num_epochs = 100
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     transform= transforms.Compose([transforms.ToTensor(),transforms.Resize((64, 64)),
                                         transforms.Normalize((0.1307,), (0.3081,))])
 
@@ -56,7 +57,7 @@ if __name__ == '__main__':
     dataset_pre_kmnist.data = torch.cat([dataset_pre_kmnist.data, dataset_pre_fmnist.data], dim = 0  )
     dataset_pre_kmnist.targets = torch.cat([dataset_pre_kmnist.targets, dataset_pre_fmnist.targets], dim = 0  )
 
-    batch_size = 64
+    batch_size = 128
     train_loader = torch.utils.data.DataLoader(dataset_pre_kmnist, batch_size=batch_size,
                                                      shuffle=True)
 

@@ -110,8 +110,8 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     #optimizer = optim.SGD(network.parameters(), lr=5e-3, momentum=0.9)
     optimizer = optim.Adam(network.parameters(), lr=1E-4)
-    PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST37'
-    network.load_state_dict(torch.load(PATH), strict=True)
+    #PATH = r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST37'
+    #network.load_state_dict(torch.load(PATH), strict=True)
 
 #cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, 1e-3, 5e-3,
     #                                  step_size_up=100)

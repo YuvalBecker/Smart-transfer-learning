@@ -194,7 +194,7 @@ def main(args):
             loss = criterion(outputs, labels.cuda())
             loss.backward()
             if args.with_custom_grad:
-                if epoch < 35:
+                if epoch < 55:
                     rg.update_grads(net=net, epoch=epoch, mode=args.freezing_mode)
             optimizer.step()
             if args.cycle_opt:
@@ -252,7 +252,7 @@ if __name__ == '__main__':
 
     #model:
     parser.add_argument('--pre_model', type=str, default='diff_net')
-    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST37')
+    parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST24')
     parser.add_argument('--pre_dataset', type=str, default='KMNIST')
     parser.add_argument('--test_dataset', type=str, default='FMNIST')
 
@@ -262,24 +262,24 @@ if __name__ == '__main__':
                                                                        'freeze everything except the classification'
                                                                        'layer')
 
-    parser.add_argument('--percent', type=int, default=55)
+    parser.add_argument('--percent', type=int, default=50)
     parser.add_argument('--num_batch_analysis', type=int, default=30)
     parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\Runs\\exp_11\\')
     parser.add_argument('--process_method', type=str, default='linear')
-    parser.add_argument('--deepest_layer', type=int, default=40)
+    parser.add_argument('--deepest_layer', type=int, default=4)
     parser.add_argument('--run_mode', type=str, default='normal')
     parser.add_argument('--freezing_mode', type=str, default='normal')
     parser.add_argument('--similarity_func', type=str, default='ws')
 
     # Training
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--batch_size', type=int, default=40)
+    parser.add_argument('--batch_size', type=int, default=10)
     parser.add_argument('--num_batch', type=int, default=3)
     parser.add_argument('--num_epochs', type=int, default=55)
     parser.add_argument('--lr', type=float, default=1E-4)
     parser.add_argument('--cycle_opt', type=bool, default=False)
     # Script to run over all params
-    num_batch = [   8,16,32]
+    num_batch = [   4,8,10]
     num_seed  = [ 171]
     args = parser.parse_args()
     for id, batch_size in enumerate(num_batch):
