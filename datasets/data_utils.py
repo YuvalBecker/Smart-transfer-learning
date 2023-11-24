@@ -18,15 +18,25 @@ class cifar_part(datasets.cifar.CIFAR10):
         self.data= self.data[indexes_dataset]
 # size data cifar10 (25000, 32, 32, 3)
 class kmnist_part(KMNIST):
-    def __init__(self, transform, train=True,middle_range=5 ,upper= True):
+    def __init__(self, transform, train=True,middle_range=5 ,upper= True ,shuffle=False):
         super(kmnist_part, self).__init__(root='.', train=train,download=True)
         self.transform = transform
+
         if upper: # Take upper classes 5 to 10
             indexes_dataset = np.where(np.array(self.targets) >= middle_range)[0]
-            self.targets = [self.targets[ind].numpy()- middle_range for ind in indexes_dataset]
+            if shuffle:
+                rand_indexes = np.random.permutation(len(indexes_dataset))
+                self.targets = [self.targets[ind].numpy() - middle_range for ind in indexes_dataset[rand_indexes]]
+            else:
+                self.targets = [self.targets[ind].numpy() - middle_range for ind in indexes_dataset]
+
         else:
             indexes_dataset = np.where(np.array(self.targets) < middle_range)[0]
-            self.targets = [self.targets[ind].numpy() for ind in indexes_dataset]
+            if shuffle:
+                rand_indexes = np.random.permutation(len(indexes_dataset))
+                self.targets = [self.targets[ind].numpy() for ind in  indexes_dataset[rand_indexes]]
+            else:
+                self.targets = [self.targets[ind].numpy() for ind in  indexes_dataset]
 
         self.data= self.data[indexes_dataset]
         temp_data = torch.unsqueeze(self.data, dim=3)

@@ -4,6 +4,7 @@ import torch
 from torchvision import models
 from torch.utils.tensorboard import SummaryWriter
 
+import matplotlib.pyplot as plt
 import torch.optim as optim
 from Pretrained_creation import  Simple_Net, Large_Simple_Net
 from CustomStatisticGrad.CustomStatisticGrad import CustomStatisticGrad
@@ -17,6 +18,7 @@ def main(args):
     batch_size = args.batch_size
     num_b = args.num_batch
     amount_data =num_b*batch_size
+    dataloader_pre2 = None
     if not os.path.exists(args.folder_save_stats):
         os.mkdir(args.folder_save_stats)
     ############# statistics for custom :
@@ -33,7 +35,11 @@ def main(args):
                                         transforms.Normalize((0.1307,), (0.3081,))])
         dataset_pre = kmnist_part(transform, train=True, middle_range=5, upper= True)
         dataloader_pre = torch.utils.data.DataLoader(dataset_pre, batch_size=batch_size,
-                                                     shuffle=True)
+                                                     shuffle=False)
+        dataset_pre2 = kmnist_part(transform, train=False, middle_range=5, upper= False, shuffle=True)
+        dataloader_pre2 = torch.utils.data.DataLoader(dataset_pre2, batch_size=batch_size,
+                                                  shuffle=False)
+
 
     if args.pre_dataset == 'MNIST':
         transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((64, 64)),
@@ -144,7 +150,7 @@ def main(args):
                                  dist_processing_method=args.process_method, batches_num=args.num_batch_analysis,
                                  percent=args.percent, deepest_layer=args.deepest_layer,
                                  save_folder=args.folder_save_stats + str(args.num_run),
-                                 process_method=args.process_method, similarity=args.similarity_func)
+                                 process_method=args.process_method, similarity=args.similarity_func, per_trained_dataset_2=dataloader_pre2)
         rg.run(mode=args.run_mode)
         #network.load_state_dict(torch.load(args.pre_model_path), strict=True)
 
@@ -162,10 +168,10 @@ def main(args):
 
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
-    optimizer = optim.RMSprop(net.parameters(), lr=args.lr)
+    #optimizer = optim.RMSprop(net.parameters(), lr=args.lr)
 
-    cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr/10, args.lr * 20,
-                                                  step_size_up=10)
+    # cycle_opt = torch.optim.lr_scheduler.CyclicLR(optimizer, args.lr/10, args.lr * 10,
+    #                                               step_size_up=4)
     if args.with_custom_grad == False:
         freeze_mode = 'None'
     else:
@@ -181,6 +187,7 @@ def main(args):
     running_loss_PREV = -1
     count_time_same_loss = 0
     count_larger_th_loss=0
+    accuracy_list = []
     for epoch in range(args.num_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         for i, data in enumerate(trainloader, args.seed):
@@ -213,8 +220,8 @@ def main(args):
                 optimizer.param_groups[0]['lr'] = args.lr
                 count_larger_th_loss = 0
             count_time_same_loss = 0
-        print('[%d, %5d] loss: %.3f' %
-              (epoch + 1, i + 1, running_loss / (i - args.seed)))
+        #print('[%d, %5d] loss: %.3f' %
+        #      (epoch + 1, i + 1, running_loss / (i - args.seed)))
 
         running_loss_PREV= running_loss
 
@@ -231,9 +238,9 @@ def main(args):
                 correct += np.array((predicted.detach().cpu() == labels)).sum()
                 if count > 10000:
                     break
-        print(
-            'Accuracy of the network on the 10000 test images: %d %%' % (
-                    100 * correct / total))
+        #print(
+        #    'Accuracy of the network on the 10000 test images: %d %%' % (
+        #            100 * correct / total))
         writer.add_scalar('Test - Accuracy',
                           (100 * correct / total),
                           epoch)
@@ -243,8 +250,10 @@ def main(args):
         writer.add_scalar('LR',
                           (optimizer.param_groups[0]['lr']),
                           epoch)
-
+        accuracy_list.append(100 * correct / total)
         accuracy.append((epoch, 100 * correct / total))
+    print('accuracy_max:' + str(np.max(accuracy_list)))
+    return np.max(accuracy_list)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_run', type=int, default=2),
@@ -254,38 +263,40 @@ if __name__ == '__main__':
     parser.add_argument('--pre_model', type=str, default='diff_net')
     parser.add_argument('--pre_model_path', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_KMNIST24')
     parser.add_argument('--pre_dataset', type=str, default='KMNIST')
-    parser.add_argument('--test_dataset', type=str, default='FMNIST')
+    parser.add_argument('--test_dataset', type=str, default='KMNIST')
 
     #custom gradient:
-    parser.add_argument('--with_custom_grad', type=bool, default=True)
+    parser.add_argument('--with_custom_grad', type=bool, default=False  )
     parser.add_argument('--freeze_all', type=bool, default=False, help='only for custom_grad is false, if True,'
                                                                        'freeze everything except the classification'
                                                                        'layer')
 
-    parser.add_argument('--percent', type=int, default=50)
-    parser.add_argument('--num_batch_analysis', type=int, default=30)
-    parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\Runs\\exp_11\\')
+    parser.add_argument('--percent', type=int, default=10)
+    parser.add_argument('--num_batch_analysis', type=int, default=50)
+    parser.add_argument('--folder_save_stats', type=str, default=r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\Runs\\exp_992\\')
     parser.add_argument('--process_method', type=str, default='linear')
-    parser.add_argument('--deepest_layer', type=int, default=4)
+    parser.add_argument('--deepest_layer', type=int, default=22)
     parser.add_argument('--run_mode', type=str, default='normal')
     parser.add_argument('--freezing_mode', type=str, default='normal')
     parser.add_argument('--similarity_func', type=str, default='ws')
 
     # Training
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--batch_size', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--num_batch', type=int, default=3)
     parser.add_argument('--num_epochs', type=int, default=55)
-    parser.add_argument('--lr', type=float, default=1E-4)
+    parser.add_argument('--lr', type=float, default=8E-4)
     parser.add_argument('--cycle_opt', type=bool, default=False)
     # Script to run over all params
-    num_batch = [   4,8,10]
-    num_seed  = [ 171]
+    num_batch = [   5]
+    num_seed  = [ 171,99,123,22]
     args = parser.parse_args()
+    model_acc_max = []
     for id, batch_size in enumerate(num_batch):
         #print(id)
         args.num_run = id
         for n_seed in num_seed:
             args.num_batch = batch_size
             args.seed = n_seed
-            main(args)
+            model_acc_max.append(main(args))
+    plt.hist(model_acc_max)

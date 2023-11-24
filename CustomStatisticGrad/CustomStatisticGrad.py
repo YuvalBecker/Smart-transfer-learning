@@ -43,9 +43,10 @@ class CustomStatisticGrad:
     def __init__(self, net: torchvision.models , pretrained_data_set: torch.utils.data.DataLoader, input_test:torch.utils.data.DataLoader,
                  dist_processing_method: str='fft', batches_num: int=10, percent: int=70,
                  deepest_layer: int=11,similarity: str='ws', save_folder: str='./',
-                 process_method: str='fft'):
+                 process_method: str='fft', per_trained_dataset_2=None):
         self.process_method=process_method
         self.pretrained_data_set = pretrained_data_set
+        self.pretrained_data_set2 = per_trained_dataset_2
         self.input_test = input_test
         self.network = net
         self.max_layer = deepest_layer
@@ -61,7 +62,7 @@ class CustomStatisticGrad:
         self.PriorPreprocess =PriorPreprocess
         self.modules_name_list = []
         self.auto_enc = DeepAutoencoder().cuda()
-        self.auto_enc.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder99'), strict=True)
+        self.auto_enc.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder_299'), strict=True)
         self.enc = self.auto_enc.encoder
     def _plot_distribution(self, ind_layer, layer_pretrained, layer_test,
                                stats_val=0, method='gram', kernel_num=0, pvalue=0, num_plots=20, ax_sub=None, layer_name=''):
@@ -183,6 +184,7 @@ class CustomStatisticGrad:
     def _prepare_input_tensor(self):
         self.pretrained_iter = self.pretrained_data_set
         self.input_test_iter =self.input_test
+        self.pretrained_iter2 =self.pretrained_data_set2
 
     def _hook_assign_module(self):
         self.modules_name_list = []
@@ -290,49 +292,71 @@ class CustomStatisticGrad:
     def _calc_layers_outputs(self, batches_num=10, mode='normal'):
         output_pre = []
         output_test = []
+        output_pre2 = []
         out_feature_store_pre = []
         out_feature_store_test =[]
+        out_feature_store_pre2 = []
 
     #### Runs over the first layer.
-        for ind_batch, (input_model, input_test) \
-                in enumerate(zip(self.pretrained_iter,
-                                 self.input_test_iter)):
+        if self.pretrained_iter2 is not None:
+            iter_data_sets_run = zip(self.pretrained_iter,
+                                 self.input_test_iter,self.pretrained_iter2 )
+        for ind_batch, tuple_out in enumerate(iter_data_sets_run):
             if ind_batch > batches_num:
                 break
+            if self.pretrained_iter2 is not None:
+                input_model, input_test, input_pre2 = tuple_out
+            else:
+                input_model, input_test = tuple_out
+
             bp = input_model[0].to(self.device, dtype=torch.float)
             bp_test = input_test[0].to(self.device, dtype=torch.float)
+            bp_2 = input_pre2[0].to(self.device, dtype=torch.float)
+
             module_f = list(self.network.children())[0]
             name_module = list(self.network.named_modules())[1][0]
             feature_l = module_f.forward(bp)
             feature_l_test = module_f.forward(bp_test)
+            feature_l2 = module_f.forward(bp_2)
 
             self.pre_feature = True
             if self.pre_feature:
-                for feature_b_pre, feature_b_test in zip(feature_l, feature_l_test):
+                for feature_b_pre, feature_b_test, feature_b_pre2 in zip(feature_l, feature_l_test, feature_l2):
                     resized_tensor_pre = F.interpolate(feature_b_pre.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
                     resized_tensor_test = F.interpolate(feature_b_test.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+                    resized_tensor_pre2 = F.interpolate(feature_b_pre2.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
 
                     out_encs_pre = self.enc(resized_tensor_pre.view(-1, 64*64))
                     out_encs_test = self.enc(resized_tensor_test.view(-1, 64*64))
+                    out_encs_pre2 = self.enc(resized_tensor_pre2.view(-1, 64*64))
 
                     if len(out_feature_store_pre) > 0:
                         out_feature_store_pre = torch.cat([out_feature_store_pre ,out_encs_pre.unsqueeze(0)] ,dim=0)
                         out_feature_store_test = torch.cat([out_feature_store_test , out_encs_test.unsqueeze(0)] ,dim=0)
+                        out_feature_store_pre2 = torch.cat([out_feature_store_pre2 ,out_encs_pre2.unsqueeze(0)] ,dim=0)
+
                     else:
                         out_feature_store_pre = out_encs_pre.unsqueeze(0)
                         out_feature_store_test = out_encs_test.unsqueeze(0)
+                        out_feature_store_pre2 = out_encs_pre2.unsqueeze(0)
+
                 out_feature_store_pre_nump = np.transpose(out_feature_store_pre.cpu().detach().numpy(), [1,0,2])
                 out_feature_store_test_nump = np.transpose(out_feature_store_test.cpu().detach().numpy(), [1,0,2])
+                out_feature_store_pre_nump2 = np.transpose(out_feature_store_pre2.cpu().detach().numpy(), [1,0,2])
 
             if len(output_pre) > 0:
                 output_pre = torch.cat([output_pre ,feature_l] ,dim=0)
                 output_test = torch.cat([output_test , feature_l_test] ,dim=0)
+                output_pre2 = torch.cat([output_pre2 ,feature_l2] ,dim=0)
+
             else:
                 output_pre = module_f.forward(bp)
                 output_test = module_f.forward(bp_test)
+                output_pre2 = module_f.forward(bp_2)
 
         output_test_nump = np.transpose(output_test.cpu().detach().numpy(), [1,0,2,3])
         output_pre_nump = np.transpose(output_pre.cpu().detach().numpy(), [1,0,2,3])
+        output_pre_nump2 = np.transpose(output_pre2.cpu().detach().numpy(), [1,0,2,3])
         sim_ch =[]
         self.kernel_mean = defaultdict(list)
         self.kernel_std = defaultdict(list)
@@ -341,7 +365,8 @@ class CustomStatisticGrad:
             self.modules_name_list.append(name_module)
 
 
-        for out_test_ch,output_pre_ch, out_enc_pre_ch, out_enc_test_ch  in zip(output_test_nump,output_pre_nump,out_feature_store_pre_nump,out_feature_store_test_nump):
+        for out_test_ch,output_pre_ch, output_pre_ch2, out_enc_pre_ch, out_enc_test_ch, out_enc_pre_ch2  \
+        in zip(output_test_nump,output_pre_nump,output_pre_nump2,out_feature_store_pre_nump,out_feature_store_test_nump, out_feature_store_pre_nump2):
             """
             Compansate forwarding distribution from non similar kernels to later similar kernels.
             There is a possiblitly that a generalized kernel in the later layers wont be identified as a generalized due to out of distribution input from previous layers.
@@ -355,22 +380,26 @@ class CustomStatisticGrad:
 
             #sim_ch.append(kl(np.ravel(out_test_ch_transform), np.ravel(output_pre_ch_transform)) )
             kl_out =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_test_ch)
-            sim_ch.append(1 / kl_out )
+            kl_out2 =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_pre_ch2)
+            simm_ratio_kl = kl_out * kl_out2 # The ratio between the kl of the pretrained vs other pre-trained and pretrained with test dataset
+            sim_ch.append(1 / simm_ratio_kl )
 
         # Calculate the required mean and std:
             self.kernel_mean[name_module].append(np.mean(-1*np.ravel(out_test_ch)) + np.mean(np.ravel(output_pre_ch)))
             self.kernel_std[name_module].append( np.std(np.ravel(output_pre_ch)) / np.std(np.ravel(out_test_ch)))
         # Here we chose a hard threshold. - Should be parametrized by the user.
-        bad_sim = sim_ch  < np.mean(sim_ch) * 1.1
+        bad_sim = sim_ch  < np.mean(sim_ch)
         L = len(list(self.network.children()))
         name_module = list(self.network.named_modules())[1][0]
 
         self.stats_value_per_layer[name_module] = sim_ch
         for index_module, module_f in enumerate(list(self.network.children())[1: L - 1 ]):
             output_pre_new = []
+            output_pre_new2 = []
             output_test_new = []
             out_feature_store_pre = []
             out_feature_store_test =[]
+            out_feature_store_pre2 = []
 
             inds_replace = np.where(bad_sim)[0]
             for indr in inds_replace:
@@ -381,48 +410,82 @@ class CustomStatisticGrad:
                 #print(ind)## Continue later.
                 feature_l = module_f.forward(output_pre[ind].unsqueeze(0))
                 feature_l_test = module_f.forward(output_test[ind].unsqueeze(0))
+                feature_l2 = module_f.forward(output_pre2[ind].unsqueeze(0))
 
                 self.pre_feature = True
                 if self.pre_feature:
-                    for feature_b_pre, feature_b_test in zip(feature_l, feature_l_test):
+                    for feature_b_pre, feature_b_test, feature_b_pre2 in zip(feature_l, feature_l_test, feature_l2):
                         resized_tensor_pre = F.interpolate(feature_b_pre.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
                         resized_tensor_test = F.interpolate(feature_b_test.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
+                        resized_tensor_pre2 = F.interpolate(feature_b_pre2.squeeze().unsqueeze(1) , size=(64, 64), mode='nearest')
 
+                        out_encs_pre2 = self.enc(resized_tensor_pre2.view(-1, 64*64))
                         out_encs_pre = self.enc(resized_tensor_pre.view(-1, 64*64))
                         out_encs_test = self.enc(resized_tensor_test.view(-1, 64*64))
 
                         if len(out_feature_store_pre) > 0:
+                            out_feature_store_pre2 = torch.cat([out_feature_store_pre2 ,out_encs_pre2.unsqueeze(0)] ,dim=0)
                             out_feature_store_pre = torch.cat([out_feature_store_pre ,out_encs_pre.unsqueeze(0)] ,dim=0)
                             out_feature_store_test = torch.cat([out_feature_store_test , out_encs_test.unsqueeze(0)] ,dim=0)
                         else:
                             out_feature_store_pre = out_encs_pre.unsqueeze(0)
+                            out_feature_store_pre2 = out_encs_pre2.unsqueeze(0)
                             out_feature_store_test = out_encs_test.unsqueeze(0)
                     out_feature_store_pre_nump = np.transpose(out_feature_store_pre.cpu().detach().numpy(), [1,0,2])
+                    out_feature_store_pre_nump2 = np.transpose(out_feature_store_pre2.cpu().detach().numpy(), [1,0,2])
                     out_feature_store_test_nump = np.transpose(out_feature_store_test.cpu().detach().numpy(), [1,0,2])
 
                 if len(output_pre_new) > 0:
-                        output_pre_new = torch.cat([output_pre_new , module_f.forward(output_pre[ind].unsqueeze(0))] ,dim=0)
-                        output_test_new = torch.cat([output_test_new , module_f.forward(output_test[ind].unsqueeze(0))] ,dim=0)
+                    output_pre_new2 = torch.cat([output_pre_new2 , module_f.forward(output_pre2[ind].unsqueeze(0))] ,dim=0)
+                    output_pre_new = torch.cat([output_pre_new , module_f.forward(output_pre[ind].unsqueeze(0))] ,dim=0)
+                    output_test_new = torch.cat([output_test_new , module_f.forward(output_test[ind].unsqueeze(0))] ,dim=0)
                 else:
-                        output_pre_new = module_f.forward(output_pre[ind].unsqueeze(0))
-                        output_test_new = module_f.forward(output_test[ind].unsqueeze(0) )
+                    output_pre_new = module_f.forward(output_pre[ind].unsqueeze(0))
+                    output_test_new = module_f.forward(output_test[ind].unsqueeze(0) )
+                    output_pre_new2 = module_f.forward(output_pre2[ind].unsqueeze(0))
 
 
             output_test_nump = np.transpose(output_test_new.cpu().detach().numpy(), [1,0,2,3])
             output_pre_nump = np.transpose(output_pre_new.cpu().detach().numpy(), [1,0,2,3])
+            output_pre_nump2 = np.transpose(output_pre_new2.cpu().detach().numpy(), [1,0,2,3])
             sim_ch =[]
             name_module = list(self.network.named_modules())[index_module + 2][0]
 
-            for out_test_ch,output_pre_ch, out_enc_pre_ch, out_enc_test_ch  in zip(output_test_nump,output_pre_nump,out_feature_store_pre_nump,out_feature_store_test_nump):
-                kl_out =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_test_ch)
-                sim_ch.append(1 / kl_out )
-
+            for out_test_ch,output_pre_ch,output_pre_ch2, out_enc_pre_ch, out_enc_test_ch ,out_enc_pre_ch2 in zip(output_test_nump,output_pre_nump,output_pre_nump2,out_feature_store_pre_nump,out_feature_store_test_nump,out_feature_store_pre_nump2):
+                kl_out1 =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_test_ch)
+                kl_out2 =  self.calculate_kl_divergence(out_enc_pre_ch, out_enc_pre_ch2)
+                simm_ratio_kl = kl_out1 * kl_out2
+                sim_ch.append(1 / simm_ratio_kl )
+                ## Store in a fio
+                #from mpl_toolkits.mplot3d import Axes3D
+#
+                #        # Generate a random 5D sample distribution with 1000 samples
+#
+                # Set up a 3D plot
+                #fig = plt.figure()
+                #ax = fig.add_subplot(111, projection='3d')
+#
+                ## Plot the samples
+                #ax.scatter(out_enc_pre_ch[:, 0], out_enc_pre_ch[:, 1], out_enc_pre_ch[:, 2], c=out_enc_pre_ch[:, 3], cmap='Reds')
+                #ax.scatter(out_enc_test_ch[:, 0], out_enc_test_ch[:, 1], out_enc_test_ch[:, 2], c=out_enc_test_ch[:, 3], cmap='BuPu')
+#
+                #ax.scatter(out_enc_pre_ch[:, 4], out_enc_pre_ch[:, 5], out_enc_pre_ch[:, 6], c=out_enc_pre_ch[:, 7], cmap='Blues')
+                #ax.scatter(out_enc_test_ch[:, 4], out_enc_test_ch[:, 5], out_enc_test_ch[:, 6], c=out_enc_test_ch[:, 7], cmap='CMRmap')
+#
+                ## Add axis labels
+                #ax.set_xlabel('X axis')
+                #ax.set_ylabel('Y axis')
+                #ax.set_zlabel('Z axis')
+#
+                ## Show the plot
+                #plt.show()
                 self.kernel_mean[name_module].append(np.mean(-1*np.ravel(out_test_ch)) + np.mean(np.ravel(output_pre_ch)))
                 self.kernel_std[name_module].append( np.std(np.ravel(output_pre_ch)) / np.std(np.ravel(out_test_ch)))
+            self.stats_value_per_layer[name_module] = sim_ch
+
             self.modules_name_list.append(name_module)
 
 
-            self.stats_value_per_layer[name_module] = sim_ch
 
 
             #if len(list(module_f._modules)) < 2 and \
@@ -433,6 +496,7 @@ class CustomStatisticGrad:
             bad_sim = sim_ch  < np.mean(sim_ch) * 1.1
             output_pre = output_pre_new.clone()
             output_test = output_test_new.clone()
+            output_pre2 = output_pre_new2.clone()
 
     def gram_layer(self, dist_new):
         b_size, num_filters, w, h = np.shape(dist_new)
@@ -669,13 +733,11 @@ class CustomStatisticGrad:
     @ staticmethod
     def calculate_kl_divergence(vector1, vector2):
         # Calculate the multi-dimensional distribution of the first vector
-        kl_divergence = 0
-        for i in range(2):
-            hist1, bins1 = np.histogramdd(vector1[:,i*5 : i*5 +5], bins=[8]*5)
+        hist1, bins1 = np.histogramdd(vector1, bins=[10]*4)
+        # Calculate the multi-dimensional distribution of the second vector
+        hist2, bins2 = np.histogramdd(vector2, bins=bins1)
 
-            # Calculate the multi-dimensional distribution of the second vector
-            hist2, bins2 = np.histogramdd(vector2[:,i*5 : i*5 +5], bins=bins1)
-            kl_divergence += entropy(np.ravel(hist1/np.sum(hist1) + 1e-4) , np.ravel(hist2/np.sum(hist2) + 1e-4)  ) / 3
+        kl_divergence = entropy(np.ravel(hist1/np.sum(hist1) + 1e-4) , np.ravel(hist2/np.sum(hist2) + 1e-4)  )
 
     # Calculate the KL divergence between the two distributions
         return kl_divergence

@@ -20,11 +20,11 @@ class DeepAutoencoder(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(128, 64),
             torch.nn.ReLU(),
-            torch.nn.Linear(64, 10)
+            torch.nn.Linear(64, 4)
         )
 
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(10, 64),
+            torch.nn.Linear(4, 64),
             torch.nn.ReLU(),
             torch.nn.Linear(64, 128),
             torch.nn.ReLU(),
@@ -44,7 +44,7 @@ class DeepAutoencoder(torch.nn.Module):
 
 if __name__ == '__main__':
     model = DeepAutoencoder().cuda()
-    model.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder99'), strict=True)
+    #model.load_state_dict(torch.load(r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder99'), strict=True)
     criterion = torch.nn.MSELoss()
     num_epochs = 100
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -109,7 +109,7 @@ if __name__ == '__main__':
         # Storing useful images and
         # reconstructed outputs for the last batch
         outputs[epoch+1] = {'img': img, 'out': out}
-        torch.save(model.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder'+str(epoch))
+        torch.save(model.state_dict(),r'C:\Users\yuval\PycharmProjects\smart_pretrained\Statistics-pretrained\saved_models\diff_net\_encoder_decoder_2'+str(epoch))
         print(train_loss)
 
     # Plotting the training loss
